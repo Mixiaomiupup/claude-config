@@ -1,0 +1,27 @@
+# Claude Code 临时文件
+*.log
+*.cache
+*.tmp
+
+# 敏感信息（已在 settings.json 中脱敏，但以防万一）
+**/ANTHROPIC_AUTH_TOKEN
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 备份文件
+*.backup
+*.bak
+
+# 审计日志（包含实际命令，可能有敏感信息）
+auto-approve-audit.log
+
+# 项目特定配置示例（这些应该在项目仓库中）
+**/project-specific-config.json

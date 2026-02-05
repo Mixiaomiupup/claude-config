@@ -1,0 +1,143 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "ANTHROPIC_AUTH_TOKEN": "YOUR_TOKEN_HERE"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(open:*)",
+      "WebSearch",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(osascript:*)",
+      "Bash(defaults:*)",
+      "Bash(echo:*)",
+      "Bash(brew install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(ruff check:*)",
+      "Bash(python3:*)",
+      "Bash(tar:*)",
+      "Bash(for skill in commit debug explain python-style refactor review test)",
+      "Bash(do if [ -f ~/.claude/skills/$skill/SKILL.md ])",
+      "Bash(then echo '   ✓ $skill/SKILL.md' else echo '   ✗ $skill/SKILL.md \\(缺失\\)' fi done)",
+      "Bash(git --version:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add origin:*)",
+      "Bash(git push:*)",
+      "Bash(ssh:*)",
+      "Bash(git config:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(claude plugin install:*)",
+      "Bash(claude plugin marketplace list:*)",
+      "Bash(claude plugin:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(chmod:*)",
+      "Bash(.claude/package-config.sh)",
+      "Bash(brew:*)",
+      "Bash(git -C /opt/homebrew/Library/Taps/homebrew/homebrew-core remote get-url:*)",
+      "Bash(git -C /opt/homebrew/Library/Taps/homebrew/homebrew-cask remote get-url:*)",
+      "Bash(export HOMEBREW_BREW_GIT_REMOTE=\"https://mirrors.aliyun.com/homebrew/brew.git\")",
+      "Bash(export HOMEBREW_CORE_GIT_REMOTE=\"https://mirrors.aliyun.com/homebrew/homebrew-core.git\")",
+      "Bash(export HOMEBREW_BOTTLE_DOMAIN=\"https://mirrors.aliyun.com/homebrew/homebrew-bottles\")",
+      "Bash(export HOMEBREW_API_DOMAIN=\"https://mirrors.aliyun.com/homebrew-bottles/api\")",
+      "Bash(ps:*)",
+      "Bash(zsh:*)",
+      "Bash(env)",
+      "Bash(gemini:*)"
+    ],
+    "defaultMode": "default"
+  },
+  "enabledPlugins": {
+    "document-skills@anthropic-agent-skills": true,
+    "example-skills@anthropic-agent-skills": true,
+    "superpowers@superpowers-marketplace": true,
+    "planning-with-files@planning-with-files": true,
+    "code-simplifier@claude-plugins-official": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/inject-context.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/validate-bash.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/protect-files.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-format.sh",
+            "async": true,
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-approve-safe.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Code 需要你的注意\" with title \"Claude Code\" sound name \"Glass\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
