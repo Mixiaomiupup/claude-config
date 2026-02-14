@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "plugins": {
+    "document-skills@anthropic-agent-skills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/anthropic-agent-skills/document-skills/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-13T12:48:57.651Z",
+        "lastUpdated": "2026-01-13T12:48:57.651Z",
+        "isLocal": true
+      }
+    ],
+    "example-skills@anthropic-agent-skills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/anthropic-agent-skills/example-skills/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-13T12:48:58.205Z",
+        "lastUpdated": "2026-01-13T12:48:58.205Z",
+        "isLocal": true
+      }
+    ],
+    "superpowers@superpowers-marketplace": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/superpowers-marketplace/superpowers/4.0.3",
+        "version": "4.0.3",
+        "installedAt": "2026-01-14T02:07:25.670Z",
+        "lastUpdated": "2026-01-14T02:07:25.670Z",
+        "gitCommitSha": "b9e16498b9b6b06defa34cf0d6d345cd2c13ad31",
+        "isLocal": false
+      }
+    ],
+    "planning-with-files@planning-with-files": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/planning-with-files/planning-with-files/2.1.2",
+        "version": "2.1.2",
+        "installedAt": "2026-01-14T03:27:58.805Z",
+        "lastUpdated": "2026-01-14T03:27:58.805Z",
+        "isLocal": true
+      }
+    ],
+    "code-simplifier@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/claude-plugins-official/code-simplifier/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-01-14T03:24:37.958Z",
+        "lastUpdated": "2026-01-14T03:24:37.958Z",
+        "isLocal": true
+      }
+    ]
+  }
+}
