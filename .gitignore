@@ -25,3 +25,35 @@ auto-approve-audit.log
 
 # 项目特定配置示例（这些应该在项目仓库中）
 **/project-specific-config.json
+
+# 运行时数据
+history.jsonl
+stats-cache.json
+session-env/
+shell-snapshots/
+file-history/
+debug/
+todos/
+telemetry/
+usage-data/
+statsig/
+ide/
+projects/
+tasks/
+
+# 插件缓存
+plugins/cache/
+plugins/marketplaces/
+plugins/install-counts-cache.json
+plugins/known_marketplaces.json
+
+# 临时计划
+plans/active/
+plans/archive/
+plans/*.md
+!plans/README.md
+!plans/PLANS_INDEX.md
+plans.backup.*
+
+# 同步脚本日志
+sync-*.log

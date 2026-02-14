@@ -9,8 +9,13 @@ claude-config/
 ├── README.md                     # 本文件
 ├── CLAUDE.md                     # 全局配置文档（核心）
 ├── AUTO_APPROVE_GUIDE.md         # 权限自动批准系统使用指南
+├── CONFIG_PACKAGE_GUIDE.md       # 配置包使用指南
 ├── settings.json                 # 全局设置（已脱敏）
 ├── settings.local.json           # 用户扩展设置
+├── sync-config.sh                # 同步共享配置
+├── sync-to-remote.sh             # 本地 → 远程同步脚本
+├── restore-from-remote.sh        # 远程 → 本地恢复脚本
+├── skill-sources.json            # 第三方 skill 来源记录
 ├── hooks/                        # Hook 脚本
 │   ├── auto-approve-safe.sh     # 权限自动批准（激进模式）
 │   ├── validate-bash.sh         # Bash 命令验证
@@ -30,7 +35,24 @@ claude-config/
 │   ├── review/                  # 代码审查
 │   ├── test/                    # 测试生成
 │   ├── doc-control/             # 文档控制
-│   └── baoyu-skills/            # Baoyu 技能集
+│   └── x2md/                    # X/Twitter 转 Markdown
+├── agents/                       # 自定义 agent 定义
+│   ├── bug-analyzer.md
+│   ├── code-reviewer.md
+│   ├── dev-planner.md
+│   ├── story-generator.md
+│   └── ui-sketcher.md
+├── commands/                     # 自定义命令
+│   └── commit.md
+├── output-styles/                # 输出样式
+│   ├── coding-vibes.md
+│   └── structural-thinking.md
+├── plans/                        # 规划系统基础设施
+│   ├── README.md
+│   ├── PLANS_INDEX.md
+│   └── templates/
+├── plugins/                      # 插件清单
+│   └── installed_plugins.json
 └── docs/                         # 文档
     └── CONFIG_PACKAGE_GUIDE.md  # 配置包指南
 ```
@@ -230,46 +252,51 @@ claude skill debug
 - [AUTO_APPROVE_GUIDE.md](AUTO_APPROVE_GUIDE.md) - 权限自动批准系统详解
 - [CONFIG_PACKAGE_GUIDE.md](docs/CONFIG_PACKAGE_GUIDE.md) - 配置包使用指南
 
-## 🔄 更新配置
+## 🔄 配置同步
 
-### 从本地同步到仓库
+本仓库使用自动化脚本实现 `~/.claude/` 到远程仓库的单向同步。
 
-```bash
-cd ~/claude-config
-
-# 更新配置文件（脱敏）
-jq 'del(.env.ANTHROPIC_AUTH_TOKEN) | .env.ANTHROPIC_AUTH_TOKEN = "YOUR_TOKEN_HERE"' ~/.claude/settings.json > settings.json
-
-# 更新其他文件
-cp ~/.claude/CLAUDE.md .
-cp ~/.claude/AUTO_APPROVE_GUIDE.md .
-cp ~/.claude/settings.local.json .
-cp -r ~/.claude/hooks/* hooks/
-cp -r ~/.claude/skills/* skills/
-
-# 提交更改
-git add .
-git commit -m "chore: update configuration"
-git push
-```
-
-### 从仓库同步到本地
+### 同步到远程（日常使用）
 
 ```bash
-cd ~/claude-config
-git pull
+# 预览变更（不提交）
+~/.claude/sync-to-remote.sh --dry-run
 
-# 安装更新
-cp CLAUDE.md ~/.claude/
-cp AUTO_APPROVE_GUIDE.md ~/.claude/
-cp settings.local.json ~/.claude/
-cp -r hooks/* ~/.claude/hooks/
-cp -r skills/* ~/.claude/skills/
-chmod +x ~/.claude/hooks/*.sh
+# 同步并推送（会提示确认）
+~/.claude/sync-to-remote.sh
 
-# 验证
-~/.claude/hooks/validate-config.sh
+# 自定义提交信息
+~/.claude/sync-to-remote.sh -m "feat: add new skill"
 ```
+
+脚本自动处理：
+- `settings.json` 脱敏（替换 token、删除 model 字段）
+- 排除第三方 skill（如 baoyu-skills），仅记录其 git URL 到 `skill-sources.json`
+- 排除运行时数据、缓存、临时文件
+- 同步 agents、commands、output-styles、plans 基础设施、插件清单
+
+### 新机器恢复
+
+```bash
+# 1. 获取恢复脚本
+git clone git@github.com:Mixiaomiupup/claude-config.git /tmp/claude-config
+cp /tmp/claude-config/restore-from-remote.sh ~/.claude/
+
+# 2. 预览恢复内容
+~/.claude/restore-from-remote.sh --dry-run
+
+# 3. 执行完整恢复（自动备份现有配置）
+~/.claude/restore-from-remote.sh
+
+# 4. 选择性恢复
+~/.claude/restore-from-remote.sh --only skills hooks
+```
+
+恢复脚本自动处理：
+- 备份现有 `~/.claude/` 到 `~/.claude.backup.YYYYMMDD_HHMMSS/`
+- `settings.json` 合并策略：保留本地 token，其余从仓库恢复
+- 根据 `skill-sources.json` 自动 `git clone` 第三方 skill
+- 恢复 hook 可执行权限
 
 ## 🎨 配置亮点
 
