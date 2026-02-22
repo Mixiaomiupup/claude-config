@@ -39,13 +39,65 @@ SAFE_COMMANDS="ls|pwd|whoami|date|echo|cat|head|tail|grep|find|tree|wc|sort|uniq
 SAFE_GIT="git status|git log|git diff|git show|git branch|git remote|git fetch|git ls-files|git ls-tree|git rev-parse|git describe|git tag|git --version|git config"
 SAFE_PKG="npm list|npm outdated|pip list|pip freeze|pip3 list|poetry show|node --version|npm --version|python3 --version|python --version|pip --version|pip3 --version|uv --version"
 
+# 子命令注册表（仅包含 SAFE_GIT/SAFE_PKG/CAREFUL_COMMANDS 中引用的子命令）
+GIT_SUBCMDS="status|log|diff|show|branch|remote|fetch|ls-files|ls-tree|rev-parse|describe|tag|config|add|commit|pull|stash|checkout|clone|init|rm|push|worktree|mv|reset|rebase"
+NPM_SUBCMDS="list|outdated|test|run|install|ci|update"
+PIP_SUBCMDS="list|freeze|install|show"
+POETRY_SUBCMDS="show|install|update|run"
+RUFF_SUBCMDS="check|format"
+BREW_SUBCMDS="install"
+
+# 规范化命令：跳过全局选项，找到第一个已知子命令，重组为 <tool> <subcmd> <args>
+normalize_cmd() {
+  local cmd="$1"
+  local tool="${cmd%% *}"
+
+  local subcmds
+  case "$tool" in
+    git)      subcmds="$GIT_SUBCMDS" ;;
+    npm)      subcmds="$NPM_SUBCMDS" ;;
+    pip|pip3) subcmds="$PIP_SUBCMDS" ;;
+    poetry)   subcmds="$POETRY_SUBCMDS" ;;
+    ruff)     subcmds="$RUFF_SUBCMDS" ;;
+    brew)     subcmds="$BREW_SUBCMDS" ;;
+    *)        echo "$cmd"; return ;;
+  esac
+
+  local rest="${cmd#"$tool" }"
+  [ "$rest" = "$cmd" ] && { echo "$cmd"; return; }
+
+  local remaining="$rest"
+  while [ -n "$remaining" ]; do
+    local token="${remaining%% *}"
+    if [[ "$remaining" == *" "* ]]; then
+      remaining="${remaining#* }"
+    else
+      remaining=""
+    fi
+    # 匹配子命令（bash builtin，无子进程）
+    if [[ "$token" =~ ^($subcmds)$ ]]; then
+      [ -n "$remaining" ] && echo "$tool $token $remaining" || echo "$tool $token"
+      return
+    fi
+    # --version 伪子命令
+    if [ "$token" = "--version" ]; then
+      [ -n "$remaining" ] && echo "$tool --version $remaining" || echo "$tool --version"
+      return
+    fi
+  done
+
+  echo "$cmd"
+}
+
 # 检查单个子命令是否安全
 is_safe() {
   local subcmd="$1"
+  local normalized
+  normalized=$(normalize_cmd "$subcmd")
   echo "$subcmd" | grep -qE "^($SAFE_COMMANDS) " && return 0
   echo "$subcmd" | grep -qE "^($SAFE_COMMANDS)$" && return 0
-  echo "$subcmd" | grep -qE "^($SAFE_GIT)" && return 0
-  echo "$subcmd" | grep -qE "^($SAFE_PKG)" && return 0
+  echo "$normalized" | grep -qE "^($SAFE_GIT)" && return 0
+  echo "$normalized" | grep -qE "^($SAFE_PKG)" && return 0
   echo "$subcmd" | grep -qE "^(unzip -l|tar -tf|tar -tzf)" && return 0
   return 1
 }
@@ -55,7 +107,10 @@ CAREFUL_COMMANDS="git add|git commit|git pull|git stash|git checkout|git clone|g
 
 is_careful() {
   local subcmd="$1"
+  local normalized
+  normalized=$(normalize_cmd "$subcmd")
   echo "$subcmd" | grep -qE "^($CAREFUL_COMMANDS)( |$)" && return 0
+  echo "$normalized" | grep -qE "^($CAREFUL_COMMANDS)( |$)" && return 0
   echo "$subcmd" | grep -qE "^\\.venv/bin/" && return 0
   # ~/.claude/ scripts (sync, hooks, etc.)
   echo "$subcmd" | grep -qE "^~/.claude/|^\\\$HOME/.claude/|^/Users/.*/\.claude/" && return 0

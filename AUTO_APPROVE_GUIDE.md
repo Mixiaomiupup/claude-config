@@ -1,7 +1,7 @@
 # Claude Code 自动批准系统架构
 
-**版本**: 2.0.0
-**更新日期**: 2026-02-22
+**版本**: 2.1.0
+**更新日期**: 2026-02-23
 **设计原则**: permissions.allow 只放 hooks 盲区，hooks 统一管理所有 Bash 命令
 
 ---
@@ -69,7 +69,7 @@
 | `WebSearch` | 非 Bash 工具，无 hook matcher |
 | `Bash(open:*)` | macOS open 命令，不应加入 hook CAREFUL（可打开任意 URL） |
 | `Bash(.claude/package-config.sh)` | 相对路径，hook 只匹配 `~/.claude/` 绝对路径 |
-| `Bash(git -C /opt/homebrew/.../homebrew-core remote get-url:*)` | git -C 不是 git 子命令，hook 匹配不到 |
+| `Bash(git -C /opt/homebrew/.../homebrew-core remote get-url:*)` | ~~git -C 不是 git 子命令，hook 匹配不到~~ v2.1.0 已被 normalize_cmd 覆盖，可移除 |
 | `Bash(git -C /opt/homebrew/.../homebrew-cask remote get-url:*)` | 同上 |
 
 ### 2.2 settings.local.json — 全局（原样同步到远程）
@@ -187,6 +187,36 @@ ssh-keyscan  scp  gh  mdfind  rsync  osascript  defaults
 virtualenv  black  isort  code  ghostty  gemini  crontab
 uv  uvx  crwl  claude  playwright
 ```
+
+**通用命令规范化**（normalize_cmd）：
+
+CLI 工具支持在子命令前插入全局选项（如 `git -C /path show`、`npm --global list`），
+导致两词模式（`git show`、`npm list`）匹配失败。`normalize_cmd()` 通过子命令注册表
+解决此问题：扫描命令 token，跳过所有 flag，找到第一个已知子命令，重组为 `<tool> <subcmd> <args>`。
+
+支持的工具及其子命令注册表：
+
+| 工具 | 子命令 |
+|------|--------|
+| git | status, log, diff, show, branch, remote, fetch, ls-files, ls-tree, rev-parse, describe, tag, config, add, commit, pull, stash, checkout, clone, init, rm, push, worktree, mv, reset, rebase |
+| npm | list, outdated, test, run, install, ci, update |
+| pip/pip3 | list, freeze, install, show |
+| poetry | show, install, update, run |
+| ruff | check, format |
+| brew | install |
+
+示例：
+```
+git -C /path show abc123          → git show abc123
+git --no-pager -C /path log       → git log
+npm --global list                 → npm list
+pip --quiet install requests      → pip install requests
+ruff --config pyproject.toml format . → ruff format .
+brew --verbose install jq         → brew install jq
+```
+
+`--version` 作为伪子命令处理：`npm --version` 保持不变。
+不在注册表中的工具（ls、python 等）直接返回原始命令。
 
 **特殊匹配**：
 - `.venv/bin/*` — 虚拟环境命令
@@ -389,11 +419,15 @@ Hook 有 5 秒超时和 jq 依赖，如果 hook 故障，allow 中的条目作�
 不会匹配 SAFE/CAREFUL 列表中的 `python3`。
 修改 hook 支持路径解析会增加复杂度，不如直接放 allow。
 
-### D4: 为什么 `git -C` 命令放在 allow
+### D4: ~~为什么 `git -C` 命令放在 allow~~ (已解决)
 
-Hook 中 `git` 相关匹配是 `git status`, `git add` 等子命令模式，
+**v2.0.0**: Hook 中 `git` 相关匹配是 `git status`, `git add` 等子命令模式，
 `git -C /path remote get-url` 的首 token 是 `git`，第二个 token 是 `-C` 而非子命令，
 不匹配任何 SAFE_GIT 或 CAREFUL 模式。
+
+**v2.1.0**: `normalize_cmd()` 通过子命令注册表跳过全局选项，
+`git -C /path remote get-url` 规范化为 `git remote get-url`，匹配 SAFE_GIT。
+settings.json 中的两条 `git -C .../homebrew-*` 条目可考虑移除。
 
 ### D5: 2026-02-22 整改 — 从冗余到精简
 
@@ -411,5 +445,6 @@ Hook 中 `git` 相关匹配是 `git status`, `git add` 等子命令模式，
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 2.1.0 | 2026-02-23 | normalize_git→normalize_cmd 通用化；支持 git/npm/pip/poetry/ruff/brew 子命令跳过全局选项；修复 SAFE_PKG 匹配 bug |
 | 2.0.0 | 2026-02-22 | 重写为架构文档；记录三层体系、整改结果、设计决策 |
 | 1.0.0 | 2026-02-05 | 初始版本：Phase 1-4 实施指南 |
