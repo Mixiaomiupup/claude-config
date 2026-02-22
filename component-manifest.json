@@ -1,0 +1,63 @@
+{
+  "version": "1.0.0",
+  "remotes": {
+    "config": {
+      "github": "git@github.com:Mixiaomiupup/claude-config.git",
+      "yunxiao": "git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_config.git"
+    },
+    "skills": {
+      "github": "git@github.com:Mixiaomiupup/claude-skills.git",
+      "yunxiao": "git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_skills.git"
+    }
+  },
+  "skills": {
+    "first-party": [
+      "commit",
+      "debug",
+      "doc-control",
+      "explain",
+      "kb",
+      "python-style",
+      "refactor",
+      "remote-repos",
+      "review",
+      "server",
+      "sync-config",
+      "test",
+      "ucal",
+      "x2md"
+    ],
+    "third-party": {
+      "baoyu-skills": {
+        "url": "https://github.com/jimliu/baoyu-skills.git",
+        "branch": "main"
+      }
+    }
+  },
+  "sanitize": {
+    "settings.json": {
+      "replace_env_keys": [
+        "ANTHROPIC_AUTH_TOKEN"
+      ],
+      "strip_fields": [
+        "model"
+      ]
+    },
+    "skills/server/SKILL.md": {
+      "patterns": [
+        [
+          "mi954993689\\.\\.",
+          "YOUR_PASSWORD_HERE"
+        ],
+        [
+          "106\\.15\\.125\\.84",
+          "YOUR_SERVER_IP"
+        ],
+        [
+          "172\\.24\\.17\\.232",
+          "YOUR_PRIVATE_IP"
+        ]
+      ]
+    }
+  }
+}

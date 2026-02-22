@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
 # sync-config.sh — Shared configuration for Claude config sync scripts
-# Sourced by sync-to-remote.sh and restore-from-remote.sh
+# Sourced by cc-sync (and legacy scripts for backward compat)
 
-CLAUDE_DIR="$HOME/.claude"
-REPO_URL="git@github.com:Mixiaomiupup/claude-config.git"
-STAGING_DIR="/private/tmp/claude-config-staging"
-BRANCH="main"
+CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
+
+# ---- Config repo (GitHub primary) ----
+CONFIG_GITHUB_URL="git@github.com:Mixiaomiupup/claude-config.git"
+CONFIG_GITHUB_BRANCH="main"
+CONFIG_YUNXIAO_URL="git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_config.git"
+CONFIG_YUNXIAO_BRANCH="master"
+
+# ---- Skills repo (dual-mirror) ----
+SKILLS_GITHUB_URL="git@github.com:Mixiaomiupup/claude-skills.git"
+SKILLS_GITHUB_BRANCH="main"
+SKILLS_YUNXIAO_URL="git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_skills.git"
+SKILLS_YUNXIAO_BRANCH="master"
+
+# ---- Staging directories ----
+CONFIG_STAGING_DIR="/private/tmp/claude-config-staging"
+SKILLS_STAGING_DIR="/private/tmp/claude-skills-staging"
+
+# ---- Lock file ----
 LOCK_FILE="/private/tmp/claude-config-sync.lock"
 
-# Files to sync directly (relative to CLAUDE_DIR)
+# ---- Backward compat aliases (used by legacy scripts if still present) ----
+REPO_URL="$CONFIG_GITHUB_URL"
+STAGING_DIR="$CONFIG_STAGING_DIR"
+BRANCH="$CONFIG_GITHUB_BRANCH"
+
+# Files to sync directly for config repo (relative to CLAUDE_DIR)
 SYNC_FILES=(
     "README.md"
     "CLAUDE.md"
@@ -16,14 +36,14 @@ SYNC_FILES=(
     "CONFIG_PACKAGE_GUIDE.md"
     "settings.local.json"
     "sync-config.sh"
-    "sync-to-remote.sh"
-    "restore-from-remote.sh"
+    "cc-sync"
+    "component-manifest.json"
 )
 
-# Directories to sync via rsync (relative to CLAUDE_DIR)
+# Directories to sync via rsync for config repo (relative to CLAUDE_DIR)
+# NOTE: "skills" removed — skills are synced independently via push_skills
 SYNC_DIRS=(
     "hooks"
-    "skills"
     "agents"
     "commands"
     "output-styles"
@@ -48,8 +68,9 @@ SENSITIVE_KEYS=("ANTHROPIC_AUTH_TOKEN")
 # Fields to strip entirely from settings.json
 STRIP_FIELDS=("model")
 
-# Directories to exclude within synced dirs (relative paths within SYNC_DIRS)
-EXCLUDE_WITHIN=("skills/baoyu-skills")
+# ---- Skills exclude list ----
+EXCLUDE_SKILLS=("baoyu-skills")
 
-# Third-party skill sources file (generated in repo root)
+# Legacy compat
+EXCLUDE_WITHIN=("skills/baoyu-skills")
 SKILL_SOURCES_FILE="skill-sources.json"

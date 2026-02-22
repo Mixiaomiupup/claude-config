@@ -9,9 +9,7 @@
     "allow": [
       "WebSearch",
       "Bash(open:*)",
-      "Bash(.claude/package-config.sh)",
-      "Bash(git -C /opt/homebrew/Library/Taps/homebrew/homebrew-core remote get-url:*)",
-      "Bash(git -C /opt/homebrew/Library/Taps/homebrew/homebrew-cask remote get-url:*)"
+      "Bash(.claude/package-config.sh)"
     ],
     "defaultMode": "default"
   },

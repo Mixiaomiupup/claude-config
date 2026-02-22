@@ -1,0 +1,858 @@
+#!/usr/bin/env bash
+# cc-sync — Unified CLI for Claude Code config & skills sync
+# Replaces: sync-to-remote.sh, sync-skills.sh, restore-from-remote.sh
+#
+# Usage:
+#   cc-sync push [--target config|skills|all] [--platform github|yunxiao|all] [--dry-run] [-m "msg"]
+#   cc-sync pull [--target config|skills|all] [--from github|yunxiao]
+#   cc-sync status
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/sync-config.sh"
+
+# ============================================================
+#  Common utilities
+# ============================================================
+
+usage() {
+    cat <<'USAGE'
+cc-sync — Unified Claude Code config & skills sync
+
+Usage:
+  cc-sync push   [--target config|skills|all] [--platform github|yunxiao|all] [--dry-run] [-m "msg"]
+  cc-sync pull   [--target config|skills|all] [--from github|yunxiao] [--dry-run]
+  cc-sync status
+
+Subcommands:
+  push     Push local config/skills to remote repos
+  pull     Pull config/skills from remote repos to local
+  status   Show sync status for all components
+
+Options:
+  --target    Which component to sync (default: all)
+  --platform  Which remote platform to push to (default: all)
+  --from      Which remote platform to pull from (default: github)
+  --dry-run   Preview changes without committing/pushing
+  -m "msg"    Custom commit message
+USAGE
+    exit 0
+}
+
+acquire_lock() {
+    if [ -f "$LOCK_FILE" ]; then
+        local pid
+        pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            echo "ERROR: Another sync is running (PID $pid). Exiting."
+            exit 1
+        fi
+        echo "WARNING: Stale lock file found. Removing."
+        rm -f "$LOCK_FILE"
+    fi
+    echo $$ > "$LOCK_FILE"
+}
+
+release_lock() {
+    rm -f "$LOCK_FILE"
+}
+
+check_deps() {
+    for cmd in git rsync jq; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo "ERROR: $cmd is required but not found."
+            exit 1
+        fi
+    done
+}
+
+# Push to a single remote
+push_to_remote() {
+    local staging="$1" remote_name="$2" remote_url="$3" branch="$4"
+    local current_branch
+    current_branch=$(git -C "$staging" rev-parse --abbrev-ref HEAD)
+
+    # Ensure remote is configured
+    if ! git -C "$staging" remote get-url "$remote_name" &>/dev/null; then
+        git -C "$staging" remote add "$remote_name" "$remote_url"
+    else
+        git -C "$staging" remote set-url "$remote_name" "$remote_url"
+    fi
+
+    git -C "$staging" push "$remote_name" "${current_branch}:${branch}" --quiet 2>&1 && \
+        echo "  ✓ ${remote_name}: $(git -C "$staging" rev-parse --short HEAD)" || \
+        echo "  ✗ ${remote_name} push failed"
+}
+
+# ============================================================
+#  push_config — sync config repo (no skills)
+# ============================================================
+push_config() {
+    local dry_run="$1" custom_msg="$2" platform="$3"
+
+    echo "==> [config] Preparing staging: $CONFIG_STAGING_DIR"
+    if [ -d "$CONFIG_STAGING_DIR/.git" ]; then
+        # Ensure origin points to GitHub
+        git -C "$CONFIG_STAGING_DIR" remote set-url origin "$CONFIG_GITHUB_URL" 2>/dev/null || true
+        git -C "$CONFIG_STAGING_DIR" fetch origin "$CONFIG_GITHUB_BRANCH" --quiet 2>/dev/null || true
+        git -C "$CONFIG_STAGING_DIR" checkout "$CONFIG_GITHUB_BRANCH" --quiet 2>/dev/null || true
+        git -C "$CONFIG_STAGING_DIR" reset --hard "origin/$CONFIG_GITHUB_BRANCH" --quiet 2>/dev/null || true
+    else
+        rm -rf "$CONFIG_STAGING_DIR"
+        git clone --branch "$CONFIG_GITHUB_BRANCH" "$CONFIG_GITHUB_URL" "$CONFIG_STAGING_DIR" --quiet 2>/dev/null || {
+            echo "  GitHub clone failed, initializing fresh repo..."
+            mkdir -p "$CONFIG_STAGING_DIR"
+            git -C "$CONFIG_STAGING_DIR" init --quiet
+            git -C "$CONFIG_STAGING_DIR" checkout -b "$CONFIG_GITHUB_BRANCH" --quiet
+        }
+    fi
+
+    # --- Sync plain files ---
+    echo "==> [config] Syncing files..."
+    for f in "${SYNC_FILES[@]}"; do
+        src="$CLAUDE_DIR/$f"
+        if [ -f "$src" ]; then
+            cp "$src" "$CONFIG_STAGING_DIR/$f"
+            echo "  copied: $f"
+        else
+            echo "  skipped (not found): $f"
+        fi
+    done
+
+    # --- Sync directories (no skills!) ---
+    echo "==> [config] Syncing directories..."
+    for d in "${SYNC_DIRS[@]}"; do
+        src="$CLAUDE_DIR/$d/"
+        dst="$CONFIG_STAGING_DIR/$d/"
+        if [ -d "$src" ]; then
+            rsync -a --delete "$src" "$dst"
+            echo "  synced: $d/"
+        else
+            echo "  skipped (not found): $d/"
+        fi
+    done
+
+    # --- Remove skills/ from staging if it exists (migration cleanup) ---
+    if [ -d "$CONFIG_STAGING_DIR/skills" ]; then
+        rm -rf "$CONFIG_STAGING_DIR/skills"
+        echo "  removed: skills/ (no longer in config repo)"
+    fi
+
+    # --- Remove legacy files from staging ---
+    for legacy in "sync-to-remote.sh" "restore-from-remote.sh" "sync-skills.sh" "package-config.sh" "skill-sources.json"; do
+        if [ -f "$CONFIG_STAGING_DIR/$legacy" ]; then
+            rm -f "$CONFIG_STAGING_DIR/$legacy"
+            echo "  removed legacy: $legacy"
+        fi
+    done
+
+    # --- Sanitize settings.json ---
+    echo "==> [config] Sanitizing settings.json..."
+    for f in "${SANITIZE_FILES[@]}"; do
+        src="$CLAUDE_DIR/$f"
+        dst="$CONFIG_STAGING_DIR/$f"
+        if [ -f "$src" ]; then
+            local_json=$(cat "$src")
+
+            for key in "${SENSITIVE_KEYS[@]}"; do
+                local_json=$(echo "$local_json" | jq --arg k "$key" '
+                    if .env[$k] then .env[$k] = "YOUR_TOKEN_HERE" else . end
+                ')
+            done
+
+            for field in "${STRIP_FIELDS[@]}"; do
+                local_json=$(echo "$local_json" | jq "del(.$field)")
+            done
+
+            echo "$local_json" > "$dst"
+            echo "  sanitized: $f"
+        fi
+    done
+
+    # --- Sync plans infrastructure ---
+    echo "==> [config] Syncing plans infrastructure..."
+    for item in "${PLANS_INFRA[@]}"; do
+        src="$CLAUDE_DIR/$item"
+        dst="$CONFIG_STAGING_DIR/$item"
+        if [ -f "$src" ]; then
+            mkdir -p "$(dirname "$dst")"
+            cp "$src" "$dst"
+            echo "  copied: $item"
+        elif [ -d "$src" ]; then
+            mkdir -p "$dst"
+            rsync -a "$src/" "$dst/"
+            echo "  synced: $item/"
+        else
+            echo "  skipped (not found): $item"
+        fi
+    done
+
+    # --- Sync plugin manifest ---
+    echo "==> [config] Syncing plugin manifest..."
+    for item in "${PLUGIN_MANIFEST[@]}"; do
+        src="$CLAUDE_DIR/$item"
+        dst="$CONFIG_STAGING_DIR/$item"
+        if [ -f "$src" ]; then
+            mkdir -p "$(dirname "$dst")"
+            cp "$src" "$dst"
+            echo "  copied: $item"
+        else
+            echo "  skipped (not found): $item"
+        fi
+    done
+
+    # --- Sync plugins/ directory (excluding cache) ---
+    if [ -d "$CLAUDE_DIR/plugins" ]; then
+        rsync -a --delete \
+            --exclude="cache" \
+            --exclude="marketplaces" \
+            "$CLAUDE_DIR/plugins/" "$CONFIG_STAGING_DIR/plugins/"
+        echo "  synced: plugins/ (excluding cache)"
+    fi
+
+    # --- Check for changes ---
+    echo ""
+    echo "==> [config] Checking for changes..."
+    cd "$CONFIG_STAGING_DIR"
+    git add -A
+
+    if git diff --cached --quiet; then
+        echo "[config] No changes to sync."
+        return 0
+    fi
+
+    echo ""
+    echo "--- [config] Changes Summary ---"
+    git diff --cached --stat
+    echo ""
+
+    if $dry_run; then
+        echo "[DRY RUN] [config] Full diff:"
+        git diff --cached
+        echo ""
+        echo "[DRY RUN] [config] No commit or push performed."
+        return 0
+    fi
+
+    # --- Show full diff and confirm ---
+    git diff --cached
+    echo ""
+    read -rp "[config] Commit and push these changes? [y/N] " confirm
+    if [[ "$confirm" != [yY] ]]; then
+        echo "Aborted."
+        git reset HEAD --quiet
+        return 0
+    fi
+
+    # --- Commit ---
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M')
+    local commit_msg
+    if [ -n "$custom_msg" ]; then
+        commit_msg="$custom_msg"
+    else
+        commit_msg="sync: config sync $timestamp"
+    fi
+
+    local changed_files
+    changed_files=$(git diff --cached --name-only | head -20)
+    local full_msg
+    full_msg=$(printf '%s\n\nChanged files:\n%s' "$commit_msg" "$changed_files")
+
+    git commit -m "$full_msg" --quiet
+
+    # --- Push ---
+    echo ""
+    echo "==> [config] Pushing..."
+    case "$platform" in
+        github)
+            push_to_remote "$CONFIG_STAGING_DIR" "origin" "$CONFIG_GITHUB_URL" "$CONFIG_GITHUB_BRANCH"
+            ;;
+        yunxiao)
+            push_to_remote "$CONFIG_STAGING_DIR" "yunxiao" "$CONFIG_YUNXIAO_URL" "$CONFIG_YUNXIAO_BRANCH"
+            ;;
+        all)
+            push_to_remote "$CONFIG_STAGING_DIR" "origin" "$CONFIG_GITHUB_URL" "$CONFIG_GITHUB_BRANCH"
+            push_to_remote "$CONFIG_STAGING_DIR" "yunxiao" "$CONFIG_YUNXIAO_URL" "$CONFIG_YUNXIAO_BRANCH"
+            ;;
+    esac
+
+    echo "[config] Done."
+}
+
+# ============================================================
+#  push_skills — sync skills repo (with sanitization)
+# ============================================================
+push_skills() {
+    local dry_run="$1" custom_msg="$2" platform="$3"
+    local skills_dir="$CLAUDE_DIR/skills"
+
+    echo "==> [skills] Preparing staging: $SKILLS_STAGING_DIR"
+    if [ -d "$SKILLS_STAGING_DIR/.git" ]; then
+        # Verify remotes
+        local current_github current_yunxiao
+        current_github=$(git -C "$SKILLS_STAGING_DIR" remote get-url github 2>/dev/null || echo "")
+        current_yunxiao=$(git -C "$SKILLS_STAGING_DIR" remote get-url yunxiao 2>/dev/null || echo "")
+        if [[ "$current_github" != "$SKILLS_GITHUB_URL" ]] || [[ "$current_yunxiao" != "$SKILLS_YUNXIAO_URL" ]]; then
+            echo "  Remote URLs changed, re-initializing..."
+            rm -rf "$SKILLS_STAGING_DIR"
+        fi
+    fi
+
+    if [ ! -d "$SKILLS_STAGING_DIR/.git" ]; then
+        echo "  Cloning from Yunxiao..."
+        git clone --branch "$SKILLS_YUNXIAO_BRANCH" "$SKILLS_YUNXIAO_URL" "$SKILLS_STAGING_DIR" --quiet 2>/dev/null || {
+            echo "  Yunxiao clone failed, trying GitHub..."
+            git clone --branch "$SKILLS_GITHUB_BRANCH" "$SKILLS_GITHUB_URL" "$SKILLS_STAGING_DIR" --quiet 2>/dev/null || {
+                echo "  Both remotes empty, initializing fresh repo..."
+                mkdir -p "$SKILLS_STAGING_DIR"
+                git -C "$SKILLS_STAGING_DIR" init --quiet
+                git -C "$SKILLS_STAGING_DIR" checkout -b "$SKILLS_YUNXIAO_BRANCH" --quiet
+            }
+        }
+        git -C "$SKILLS_STAGING_DIR" remote remove origin 2>/dev/null || true
+        git -C "$SKILLS_STAGING_DIR" remote add github "$SKILLS_GITHUB_URL" 2>/dev/null || true
+        git -C "$SKILLS_STAGING_DIR" remote add yunxiao "$SKILLS_YUNXIAO_URL" 2>/dev/null || true
+        echo "  Remotes configured: github + yunxiao"
+    else
+        echo "  Fetching from remotes..."
+        git -C "$SKILLS_STAGING_DIR" fetch github --quiet 2>/dev/null || echo "  warn: github fetch failed"
+        git -C "$SKILLS_STAGING_DIR" fetch yunxiao --quiet 2>/dev/null || echo "  warn: yunxiao fetch failed"
+        git -C "$SKILLS_STAGING_DIR" reset --hard "yunxiao/$SKILLS_YUNXIAO_BRANCH" --quiet 2>/dev/null || true
+    fi
+
+    # --- Sync skills via rsync ---
+    echo "==> [skills] Syncing skills..."
+    local rsync_excludes=()
+    for ex in "${EXCLUDE_SKILLS[@]}"; do
+        rsync_excludes+=(--exclude="$ex")
+    done
+    rsync_excludes+=(--exclude=".git")
+
+    rsync -a --delete "${rsync_excludes[@]}" "$skills_dir/" "$SKILLS_STAGING_DIR/"
+    echo "  synced: skills/ (excluding: ${EXCLUDE_SKILLS[*]})"
+
+    # --- Sanitize server/SKILL.md ---
+    echo "==> [skills] Sanitizing sensitive content..."
+    local server_skill="$SKILLS_STAGING_DIR/server/SKILL.md"
+    if [ -f "$server_skill" ]; then
+        # Read patterns from manifest
+        local manifest="$CLAUDE_DIR/component-manifest.json"
+        if [ -f "$manifest" ]; then
+            local pattern_count
+            pattern_count=$(jq -r '.sanitize["skills/server/SKILL.md"].patterns | length' "$manifest")
+            for ((i = 0; i < pattern_count; i++)); do
+                local pattern replacement
+                pattern=$(jq -r ".sanitize[\"skills/server/SKILL.md\"].patterns[$i][0]" "$manifest")
+                replacement=$(jq -r ".sanitize[\"skills/server/SKILL.md\"].patterns[$i][1]" "$manifest")
+                sed -i '' "s/${pattern}/${replacement}/g" "$server_skill"
+            done
+            echo "  sanitized: server/SKILL.md ($pattern_count patterns applied)"
+        else
+            echo "  warn: manifest not found, using hardcoded patterns"
+            sed -i '' \
+                -e 's/mi954993689\.\./YOUR_PASSWORD_HERE/g' \
+                -e 's/106\.15\.125\.84/YOUR_SERVER_IP/g' \
+                -e 's/172\.24\.17\.232/YOUR_PRIVATE_IP/g' \
+                "$server_skill"
+            echo "  sanitized: server/SKILL.md (hardcoded patterns)"
+        fi
+    fi
+
+    # --- Check for changes ---
+    echo ""
+    echo "==> [skills] Checking for changes..."
+    cd "$SKILLS_STAGING_DIR"
+    git add -A
+
+    if git diff --cached --quiet; then
+        echo "[skills] No changes to sync."
+        return 0
+    fi
+
+    echo ""
+    echo "--- [skills] Changes Summary ---"
+    git diff --cached --stat
+    echo ""
+
+    if $dry_run; then
+        echo "[DRY RUN] [skills] Full diff:"
+        git diff --cached
+        echo ""
+        echo "[DRY RUN] [skills] No commit or push performed."
+        return 0
+    fi
+
+    # --- Show full diff and confirm ---
+    git diff --cached
+    echo ""
+    read -rp "[skills] Commit and push these changes? [y/N] " confirm
+    if [[ "$confirm" != [yY] ]]; then
+        echo "Aborted."
+        git reset HEAD --quiet
+        return 0
+    fi
+
+    # --- Commit ---
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M')
+    local commit_msg
+    if [ -n "$custom_msg" ]; then
+        commit_msg="$custom_msg"
+    else
+        commit_msg="sync: skills sync $timestamp"
+    fi
+
+    local changed_files
+    changed_files=$(git diff --cached --name-only | head -20)
+    local full_msg
+    full_msg=$(printf '%s\n\nChanged files:\n%s' "$commit_msg" "$changed_files")
+
+    git commit -m "$full_msg" --quiet
+
+    # --- Push ---
+    echo ""
+    echo "==> [skills] Pushing..."
+    case "$platform" in
+        github)
+            push_to_remote "$SKILLS_STAGING_DIR" "github" "$SKILLS_GITHUB_URL" "$SKILLS_GITHUB_BRANCH"
+            ;;
+        yunxiao)
+            push_to_remote "$SKILLS_STAGING_DIR" "yunxiao" "$SKILLS_YUNXIAO_URL" "$SKILLS_YUNXIAO_BRANCH"
+            ;;
+        all)
+            push_to_remote "$SKILLS_STAGING_DIR" "github" "$SKILLS_GITHUB_URL" "$SKILLS_GITHUB_BRANCH"
+            push_to_remote "$SKILLS_STAGING_DIR" "yunxiao" "$SKILLS_YUNXIAO_URL" "$SKILLS_YUNXIAO_BRANCH"
+            ;;
+    esac
+
+    echo "[skills] Done."
+}
+
+# ============================================================
+#  pull_config — restore config from remote
+# ============================================================
+pull_config() {
+    local dry_run="$1" from_platform="$2"
+    local clone_url clone_branch
+
+    case "$from_platform" in
+        github)  clone_url="$CONFIG_GITHUB_URL"; clone_branch="$CONFIG_GITHUB_BRANCH" ;;
+        yunxiao) clone_url="$CONFIG_YUNXIAO_URL"; clone_branch="$CONFIG_YUNXIAO_BRANCH" ;;
+    esac
+
+    echo "==> [config] Cloning from $from_platform..."
+    rm -rf "$CONFIG_STAGING_DIR"
+    git clone --branch "$clone_branch" "$clone_url" "$CONFIG_STAGING_DIR" --quiet
+    echo "  ✓ Cloned to $CONFIG_STAGING_DIR"
+
+    # --- Backup ---
+    if [ -d "$CLAUDE_DIR" ] && ! $dry_run; then
+        local backup_dir="$HOME/.claude.backup.$(date '+%Y%m%d_%H%M%S')"
+        echo "==> [config] Backing up to $backup_dir"
+        cp -a "$CLAUDE_DIR" "$backup_dir"
+        echo "  ✓ Backup created"
+    elif $dry_run; then
+        echo "[DRY RUN] Would backup ~/.claude/ to ~/.claude.backup.YYYYMMDD_HHMMSS/"
+    fi
+
+    mkdir -p "$CLAUDE_DIR"
+
+    # --- Restore files ---
+    echo "==> [config] Restoring files..."
+    for f in "${SYNC_FILES[@]}"; do
+        src="$CONFIG_STAGING_DIR/$f"
+        dst="$CLAUDE_DIR/$f"
+        if [ -f "$src" ]; then
+            if $dry_run; then
+                echo "  [DRY RUN] would copy: $f"
+            else
+                cp "$src" "$dst"
+                echo "  restored: $f"
+            fi
+        fi
+    done
+
+    # --- Restore directories ---
+    echo "==> [config] Restoring directories..."
+    for d in "${SYNC_DIRS[@]}"; do
+        src="$CONFIG_STAGING_DIR/$d/"
+        dst="$CLAUDE_DIR/$d/"
+        if [ -d "$src" ]; then
+            if $dry_run; then
+                echo "  [DRY RUN] would sync: $d/"
+            else
+                mkdir -p "$dst"
+                rsync -a "$src" "$dst"
+                echo "  restored: $d/"
+            fi
+        fi
+    done
+
+    # --- Merge settings.json ---
+    echo "==> [config] Restoring settings.json (merge strategy)..."
+    local repo_settings="$CONFIG_STAGING_DIR/settings.json"
+    local local_settings="$CLAUDE_DIR/settings.json"
+
+    if [ -f "$repo_settings" ]; then
+        if [ -f "$local_settings" ] && ! $dry_run; then
+            local merged
+            merged=$(cat "$repo_settings")
+            for key in "${SENSITIVE_KEYS[@]}"; do
+                local local_val
+                local_val=$(jq -r --arg k "$key" '.env[$k] // empty' "$local_settings")
+                if [ -n "$local_val" ] && [ "$local_val" != "YOUR_TOKEN_HERE" ]; then
+                    merged=$(echo "$merged" | jq --arg k "$key" --arg v "$local_val" '.env[$k] = $v')
+                fi
+            done
+            echo "$merged" | jq '.' > "$local_settings"
+            echo "  ✓ Merged settings.json (preserved local tokens)"
+        elif ! $dry_run; then
+            cp "$repo_settings" "$local_settings"
+            echo "  ✓ Copied settings.json (no local file to merge)"
+            echo "  ⚠ Remember to set your ANTHROPIC_AUTH_TOKEN"
+        else
+            echo "  [DRY RUN] would merge settings.json (preserve local tokens)"
+        fi
+    fi
+
+    # --- Restore plans infrastructure ---
+    echo "==> [config] Restoring plans infrastructure..."
+    for item in "${PLANS_INFRA[@]}"; do
+        src="$CONFIG_STAGING_DIR/$item"
+        dst="$CLAUDE_DIR/$item"
+        if [ -f "$src" ]; then
+            if $dry_run; then
+                echo "  [DRY RUN] would copy: $item"
+            else
+                mkdir -p "$(dirname "$dst")"
+                cp "$src" "$dst"
+                echo "  restored: $item"
+            fi
+        elif [ -d "$src" ]; then
+            if $dry_run; then
+                echo "  [DRY RUN] would sync: $item/"
+            else
+                mkdir -p "$dst"
+                rsync -a "$src/" "$dst/"
+                echo "  restored: $item/"
+            fi
+        fi
+    done
+
+    # --- Restore plugin manifest ---
+    echo "==> [config] Restoring plugin manifest..."
+    for item in "${PLUGIN_MANIFEST[@]}"; do
+        src="$CONFIG_STAGING_DIR/$item"
+        dst="$CLAUDE_DIR/$item"
+        if [ -f "$src" ]; then
+            if $dry_run; then
+                echo "  [DRY RUN] would copy: $item"
+            else
+                mkdir -p "$(dirname "$dst")"
+                cp "$src" "$dst"
+                echo "  restored: $item"
+            fi
+        fi
+    done
+
+    # --- Restore plugins directory ---
+    if [ -d "$CONFIG_STAGING_DIR/plugins" ]; then
+        if $dry_run; then
+            echo "  [DRY RUN] would sync: plugins/"
+        else
+            mkdir -p "$CLAUDE_DIR/plugins"
+            rsync -a "$CONFIG_STAGING_DIR/plugins/" "$CLAUDE_DIR/plugins/"
+            echo "  restored: plugins/"
+        fi
+    fi
+
+    # --- Fix permissions ---
+    if ! $dry_run; then
+        echo "==> [config] Fixing permissions..."
+        chmod +x "$CLAUDE_DIR/hooks/"*.sh 2>/dev/null || true
+        chmod +x "$CLAUDE_DIR/cc-sync" 2>/dev/null || true
+        chmod +x "$CLAUDE_DIR/sync-config.sh" 2>/dev/null || true
+        echo "  ✓ Permissions fixed"
+    fi
+
+    echo "[config] Done."
+}
+
+# ============================================================
+#  pull_skills — restore first-party skills from remote
+# ============================================================
+pull_skills() {
+    local dry_run="$1" from_platform="$2"
+    local clone_url clone_branch
+
+    case "$from_platform" in
+        github)  clone_url="$SKILLS_GITHUB_URL"; clone_branch="$SKILLS_GITHUB_BRANCH" ;;
+        yunxiao) clone_url="$SKILLS_YUNXIAO_URL"; clone_branch="$SKILLS_YUNXIAO_BRANCH" ;;
+    esac
+
+    echo "==> [skills] Cloning from $from_platform..."
+    rm -rf "$SKILLS_STAGING_DIR"
+    git clone --branch "$clone_branch" "$clone_url" "$SKILLS_STAGING_DIR" --quiet
+    echo "  ✓ Cloned to $SKILLS_STAGING_DIR"
+
+    # --- Sync first-party skills ---
+    echo "==> [skills] Restoring first-party skills..."
+    local skills_target="$CLAUDE_DIR/skills"
+    mkdir -p "$skills_target"
+
+    if $dry_run; then
+        echo "  [DRY RUN] would rsync skills from staging (excluding third-party)"
+        # Show what would be synced
+        local rsync_excludes=()
+        for ex in "${EXCLUDE_SKILLS[@]}"; do
+            rsync_excludes+=(--exclude="$ex")
+        done
+        rsync_excludes+=(--exclude=".git")
+        rsync -an "${rsync_excludes[@]}" "$SKILLS_STAGING_DIR/" "$skills_target/" | head -30
+    else
+        local rsync_excludes=()
+        for ex in "${EXCLUDE_SKILLS[@]}"; do
+            rsync_excludes+=(--exclude="$ex")
+        done
+        rsync_excludes+=(--exclude=".git")
+        rsync -a "${rsync_excludes[@]}" "$SKILLS_STAGING_DIR/" "$skills_target/"
+        echo "  ✓ First-party skills restored"
+    fi
+
+    # --- Clone third-party skills ---
+    echo "==> [skills] Restoring third-party skills..."
+    local manifest="$CLAUDE_DIR/component-manifest.json"
+    if [ -f "$manifest" ]; then
+        local third_party_keys
+        third_party_keys=$(jq -r '.skills["third-party"] | keys[]' "$manifest" 2>/dev/null || echo "")
+        for skill_name in $third_party_keys; do
+            local skill_url skill_branch
+            skill_url=$(jq -r ".skills[\"third-party\"][\"$skill_name\"].url" "$manifest")
+            skill_branch=$(jq -r ".skills[\"third-party\"][\"$skill_name\"].branch // \"main\"" "$manifest")
+            local target="$skills_target/$skill_name"
+
+            if [ -d "$target/.git" ]; then
+                echo "  already exists: $skill_name (skipping)"
+            elif $dry_run; then
+                echo "  [DRY RUN] would clone: $skill_url → skills/$skill_name"
+            else
+                echo "  cloning: $skill_url → skills/$skill_name"
+                git clone --branch "$skill_branch" "$skill_url" "$target" --quiet && \
+                    echo "  ✓ cloned: $skill_name" || \
+                    echo "  ✗ clone failed: $skill_name"
+            fi
+        done
+    else
+        echo "  warn: component-manifest.json not found, skipping third-party skills"
+    fi
+
+    echo "[skills] Done."
+}
+
+# ============================================================
+#  cmd_push — push subcommand dispatcher
+# ============================================================
+cmd_push() {
+    local dry_run=false custom_msg="" target="all" platform="all"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run)  dry_run=true; shift ;;
+            -m)         custom_msg="$2"; shift 2 ;;
+            --target)   target="$2"; shift 2 ;;
+            --platform) platform="$2"; shift 2 ;;
+            *)          echo "Unknown push option: $1"; exit 1 ;;
+        esac
+    done
+
+    # Validate
+    case "$target" in
+        config|skills|all) ;;
+        *) echo "Invalid target: $target (use config|skills|all)"; exit 1 ;;
+    esac
+    case "$platform" in
+        github|yunxiao|all) ;;
+        *) echo "Invalid platform: $platform (use github|yunxiao|all)"; exit 1 ;;
+    esac
+
+    acquire_lock
+    check_deps
+
+    case "$target" in
+        config) push_config "$dry_run" "$custom_msg" "$platform" ;;
+        skills) push_skills "$dry_run" "$custom_msg" "$platform" ;;
+        all)
+            push_config "$dry_run" "$custom_msg" "$platform"
+            echo ""
+            echo "=========================================="
+            echo ""
+            push_skills "$dry_run" "$custom_msg" "$platform"
+            ;;
+    esac
+}
+
+# ============================================================
+#  cmd_pull — pull subcommand dispatcher
+# ============================================================
+cmd_pull() {
+    local dry_run=false target="all" from_platform="github"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run) dry_run=true; shift ;;
+            --target)  target="$2"; shift 2 ;;
+            --from)    from_platform="$2"; shift 2 ;;
+            *)         echo "Unknown pull option: $1"; exit 1 ;;
+        esac
+    done
+
+    # Validate
+    case "$target" in
+        config|skills|all) ;;
+        *) echo "Invalid target: $target (use config|skills|all)"; exit 1 ;;
+    esac
+    case "$from_platform" in
+        github|yunxiao) ;;
+        *) echo "Invalid platform: $from_platform (use github|yunxiao)"; exit 1 ;;
+    esac
+
+    check_deps
+
+    case "$target" in
+        config) pull_config "$dry_run" "$from_platform" ;;
+        skills) pull_skills "$dry_run" "$from_platform" ;;
+        all)
+            pull_config "$dry_run" "$from_platform"
+            echo ""
+            echo "=========================================="
+            echo ""
+            pull_skills "$dry_run" "$from_platform"
+            ;;
+    esac
+
+    # --- Summary ---
+    echo ""
+    echo "=== Pull Summary ==="
+    if $dry_run; then
+        echo "[DRY RUN] No changes were made."
+    else
+        echo "✓ Restored from $from_platform"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Verify: ls ~/.claude/skills/"
+        echo "  2. Check settings: grep TOKEN ~/.claude/settings.json"
+        echo "  3. Run: claude"
+    fi
+}
+
+# ============================================================
+#  cmd_status — show sync status
+# ============================================================
+cmd_status() {
+    check_deps
+
+    echo "=== cc-sync status ==="
+    echo ""
+
+    # --- Config repo ---
+    echo "[config]"
+    if [ -d "$CONFIG_STAGING_DIR/.git" ]; then
+        local config_last_commit config_last_date
+        config_last_commit=$(git -C "$CONFIG_STAGING_DIR" log -1 --format="%h %s" 2>/dev/null || echo "unknown")
+        config_last_date=$(git -C "$CONFIG_STAGING_DIR" log -1 --format="%ci" 2>/dev/null || echo "unknown")
+        echo "  staging: $CONFIG_STAGING_DIR"
+        echo "  last sync: $config_last_date"
+        echo "  last commit: $config_last_commit"
+
+        # Quick diff check: compare key files without expensive copy
+        local changed_count=0
+        for f in "${SYNC_FILES[@]}"; do
+            if [ -f "$CLAUDE_DIR/$f" ] && [ -f "$CONFIG_STAGING_DIR/$f" ]; then
+                if ! diff -q "$CLAUDE_DIR/$f" "$CONFIG_STAGING_DIR/$f" &>/dev/null; then
+                    changed_count=$((changed_count + 1))
+                fi
+            elif [ -f "$CLAUDE_DIR/$f" ] || [ -f "$CONFIG_STAGING_DIR/$f" ]; then
+                changed_count=$((changed_count + 1))
+            fi
+        done
+        if [ "$changed_count" -eq 0 ]; then
+            echo "  status: ✓ up to date (files checked)"
+        else
+            echo "  status: ✗ $changed_count file(s) differ (run push --dry-run for details)"
+        fi
+    else
+        echo "  staging: not initialized (run 'cc-sync push --target config' first)"
+    fi
+
+    echo ""
+
+    # --- Skills repo ---
+    echo "[skills]"
+    if [ -d "$SKILLS_STAGING_DIR/.git" ]; then
+        local skills_last_commit skills_last_date
+        skills_last_commit=$(git -C "$SKILLS_STAGING_DIR" log -1 --format="%h %s" 2>/dev/null || echo "unknown")
+        skills_last_date=$(git -C "$SKILLS_STAGING_DIR" log -1 --format="%ci" 2>/dev/null || echo "unknown")
+        echo "  staging: $SKILLS_STAGING_DIR"
+        echo "  last sync: $skills_last_date"
+        echo "  last commit: $skills_last_commit"
+    else
+        echo "  staging: not initialized (run 'cc-sync push --target skills' first)"
+    fi
+
+    echo ""
+
+    # --- First-party skills ---
+    echo "[first-party skills]"
+    local manifest="$CLAUDE_DIR/component-manifest.json"
+    if [ -f "$manifest" ]; then
+        local expected_skills
+        expected_skills=$(jq -r '.skills["first-party"][]' "$manifest")
+        local found=0 missing=0
+        for skill in $expected_skills; do
+            if [ -d "$CLAUDE_DIR/skills/$skill" ]; then
+                found=$((found + 1))
+            else
+                echo "  ✗ missing: $skill"
+                missing=$((missing + 1))
+            fi
+        done
+        echo "  found: $found / $((found + missing))"
+    else
+        echo "  manifest: not found"
+    fi
+
+    echo ""
+
+    # --- Third-party skills ---
+    echo "[third-party skills]"
+    if [ -f "$manifest" ]; then
+        local third_party_keys
+        third_party_keys=$(jq -r '.skills["third-party"] | keys[]' "$manifest" 2>/dev/null || echo "")
+        for skill_name in $third_party_keys; do
+            local target="$CLAUDE_DIR/skills/$skill_name"
+            if [ -d "$target/.git" ]; then
+                local remote_url
+                remote_url=$(git -C "$target" remote get-url origin 2>/dev/null || echo "unknown")
+                echo "  ✓ $skill_name → $remote_url"
+            else
+                echo "  ✗ $skill_name (not cloned)"
+            fi
+        done
+    fi
+
+    echo ""
+}
+
+# ============================================================
+#  Main dispatcher
+# ============================================================
+trap release_lock EXIT
+
+case "${1:-}" in
+    push)   shift; cmd_push "$@" ;;
+    pull)   shift; cmd_pull "$@" ;;
+    status) cmd_status ;;
+    -h|--help|help) usage ;;
+    *)      usage ;;
+esac
