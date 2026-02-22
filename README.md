@@ -137,4 +137,14 @@ cp /tmp/claude-config/restore-from-remote.sh ~/.claude/
 
 ---
 
+## 关联项目
+
+| 项目 | 说明 | 仓库 |
+|------|------|------|
+| **ucal** | Universal Content Access Layer — 多平台内容提取 MCP Server（小红书、知乎、X、Discord） | [Mixiaomiupup/ucal](https://github.com/Mixiaomiupup/ucal) |
+
+ucal 作为全局 MCP Server 注册在 `~/.claude.json` 中，提供 `ucal_platform_search`、`ucal_platform_read`、`ucal_platform_extract`、`ucal_browser_action` 等工具。自动批准规则见 `settings.json` 中的 `mcp__ucal__.*` matcher。
+
+---
+
 **维护者**: [@Mixiaomiupup](https://github.com/Mixiaomiupup)
