@@ -5,9 +5,16 @@ description: Use when user asks to sync Claude config, backup config, restore co
 
 # Claude Config Sync
 
-Single-command sync of `~/.claude/` to `git@github.com:Mixiaomiupup/claude-config.git`. Local is the authority source.
+Two sync targets. Local is the authority source.
+
+| Target | Repo | Content |
+|--------|------|---------|
+| **Global config** | `git@github.com:Mixiaomiupup/claude-config.git` | Full `~/.claude/` config |
+| **Skills only** | GitHub `Mixiaomiupup/claude-skills` + Yunxiao `claude_skills` | `~/.claude/skills/` (dual-mirror) |
 
 ## Commands
+
+### Global Config Sync
 
 | Action | Command |
 |--------|---------|
@@ -17,6 +24,16 @@ Single-command sync of `~/.claude/` to `git@github.com:Mixiaomiupup/claude-confi
 | Preview restore | `~/.claude/restore-from-remote.sh --dry-run` |
 | Full restore | `~/.claude/restore-from-remote.sh` |
 | Selective restore | `~/.claude/restore-from-remote.sh --only skills hooks` |
+
+### Skills Sync (dual-mirror: GitHub + Yunxiao)
+
+| Action | Command |
+|--------|---------|
+| Preview changes | `~/.claude/sync-skills.sh --dry-run` |
+| Sync to both | `~/.claude/sync-skills.sh` |
+| Sync with message | `~/.claude/sync-skills.sh -m "feat: add kb skill"` |
+| GitHub only | `~/.claude/sync-skills.sh --github` |
+| Yunxiao only | `~/.claude/sync-skills.sh --yunxiao` |
 
 ## Workflow
 

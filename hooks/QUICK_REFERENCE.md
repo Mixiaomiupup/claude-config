@@ -1,155 +1,89 @@
-# Claude Code Hooks 快速参考
+# Claude Code Hooks 速查卡
 
-## 🎯 核心功能一览
-
-| Hook | 功能 | 自动/手动 |
-|------|------|-----------|
-| 🚀 SessionStart | 显示环境信息 | 自动 |
-| 📌 UserPromptSubmit | 注入 Git 上下文 | 自动 |
-| 🛡️ validate-bash | 阻止危险命令 | 自动 |
-| 🔒 protect-files | 保护关键文件 | 自动 |
-| ✨ auto-format | 自动格式化代码 | 自动 |
-| ✓ auto-approve | 自动批准安全命令 | 自动 |
-| 🔔 Notification | 桌面通知 | 自动 |
-| 🛑 Stop | 防止过早停止 | 自动 |
+**更新**: 2026-02-22 | **详细架构**: `~/.claude/AUTO_APPROVE_GUIDE.md`
 
 ---
 
-## 🚫 自动阻止的危险操作
+## 三层权限体系
+
+```
+① permissions.allow (5+15条) → 直接通过
+② hooks (auto-approve-*.sh)  → 脚本判定
+③ 弹窗问用户                  → 手动决定
+```
+
+---
+
+## 自动阻止 (PreToolUse)
 
 ```bash
-rm -rf /              # 删除根目录
-chmod 777             # 不安全权限
-dd if=                # 磁盘操作
-:(){ :|:& };:         # Fork 炸弹
-curl ... | sh         # 下载并执行
+rm -rf /          # validate-bash.sh
+chmod 777         # validate-bash.sh
+dd if=            # validate-bash.sh
+curl ... | sh     # validate-bash.sh
+.env / .ssh/      # protect-files.sh
 ```
 
 ---
 
-## 🔒 自动保护的文件
+## 自动批准 — Bash (auto-approve-safe.sh)
 
+**SAFE（静默）**:
 ```
-.env, .env.local          # 环境变量
-credentials.json          # 凭证
-package-lock.json         # 锁文件
-.git/config              # Git 配置
-.ssh/, id_rsa            # SSH 密钥
+ls cat grep find tree head tail wc sort pwd whoami date echo
+git status  git log  git diff  git show  git branch
+npm list  pip list  python3 --version  uv --version
 ```
+
+**CAREFUL（通知）**:
+```
+git add  git commit  git push  git pull  git checkout
+npm install  pip install  pytest  ruff  mypy
+mkdir cp mv rm curl wget python3 uv uvx claude gh
+```
+
+**COMPOUND**: 复合命令拆分后逐个检查
 
 ---
 
-## ✓ 自动批准的安全命令
+## 自动批准 — 其他工具
 
-```bash
-# 只读命令
-ls, cat, head, tail, grep, find
-
-# Git 查询
-git status, git log, git diff
-
-# 开发工具
-npm test, pytest, ruff check
-
-# 版本检查
-python --version, node --version
-
-# 安装命令
-npm install, pip install, brew install
-```
+| Hook 脚本 | 工具 | 策略 |
+|-----------|------|------|
+| auto-approve-read.sh | Read | 全部（敏感文件除外） |
+| auto-approve-write.sh | Write/Edit | 全部（敏感文件除外） |
+| auto-approve-tools.sh | Glob/Grep/WebFetch/Task* | 全部 |
+| inline hooks | mcp__yunxiao/tavily/ucal__ | 全部 |
 
 ---
 
-## ✨ 自动格式化支持
+## permissions.allow 保留的条目 (hooks 盲区)
 
-| 语言 | 工具 |
+| 条目 | 原因 |
 |------|------|
-| Python (`.py`) | `ruff format` |
-| JavaScript/TypeScript | `prettier` |
-| JSON | `jq` |
-| Markdown | `prettier` |
-| YAML | `prettier` |
+| `WebSearch` | 非 Bash 工具 |
+| `Bash(open:*)` | 安全考虑不放 hook |
+| `Bash(.claude/package-config.sh)` | 相对路径 |
+| `Bash(git -C ...)` x2 | git -C 非子命令 |
+| `WebFetch(domain:*)` x2 | 非 Bash 工具 |
+| `Skill(kb)` | 非 Bash 工具 |
+| `mcp__yunxiao__*` x5 | hook 故障兜底 |
+| `/opt/homebrew/bin/*` x3 | 绝对路径 |
+| `/Users/.../.local/bin/uv` | 绝对路径 |
 
 ---
 
-## 📝 常用命令
+## 维护命令
 
 ```bash
-# 查看所有 hooks
-/hooks
+# 审计日志
+grep "NEEDS-MANUAL" ~/.claude/auto-approve-audit.log | tail -20
 
-# 调试模式
-claude --debug
+# 统计
+grep -c 'SAFE)' ~/.claude/auto-approve-audit.log    # SAFE 次数
+grep -c 'CAREFUL)' ~/.claude/auto-approve-audit.log  # CAREFUL 次数
+grep -c 'NEEDS-MANUAL' ~/.claude/auto-approve-audit.log  # 手动次数
 
-# 切换详细输出
-Ctrl+O
-
-# 测试 hook 脚本
-~/.claude/hooks/session-start.sh
-
-# 验证 JSON 格式
-jq empty ~/.claude/settings.json
-
-# 查看 hooks 目录
-ls -lh ~/.claude/hooks/
+# 新增命令 → 编辑 hooks/auto-approve-safe.sh
+# 新增非 Bash 工具 → 编辑 settings.json 或 settings.local.json
 ```
-
----
-
-## 🔧 临时禁用 Hooks
-
-### 方法 1: 通过界面
-```
-/hooks → 底部切换开关
-```
-
-### 方法 2: 重命名配置
-```bash
-mv ~/.claude/settings.json ~/.claude/settings.json.backup
-```
-
----
-
-## 🎯 项目级配置（可选）
-
-```bash
-# 1. 创建项目配置目录
-cd /path/to/project
-mkdir -p .claude/hooks
-
-# 2. 复制模板
-cp ~/.claude/hooks/project-settings-template.json .claude/settings.json
-
-# 3. 创建项目 hook
-nano .claude/hooks/project-setup.sh
-
-# 4. 设置权限
-chmod +x .claude/hooks/*.sh
-
-# 5. 添加到 .gitignore
-echo ".claude/settings.local.json" >> .gitignore
-```
-
----
-
-## 🐛 故障排查
-
-| 问题 | 解决方法 |
-|------|----------|
-| Hook 不生效 | 检查执行权限、重启会话 |
-| JSON 错误 | `jq empty ~/.claude/settings.json` |
-| 脚本报错 | 手动运行脚本测试 |
-| 需要 jq | `brew install jq` |
-
----
-
-## 📚 更多信息
-
-详细文档: `~/.claude/hooks/README.md`
-
-官方文档: https://code.claude.com/docs/en/hooks
-
----
-
-**配置完成时间**: 2026-02-02
-**最后更新**: 2026-02-02

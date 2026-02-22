@@ -716,6 +716,16 @@ brainstorming → using-git-worktrees → writing-plans → executing-plans → 
 
 ---
 
+## 8. Personal Knowledge Base (Obsidian)
+
+**Vault 路径**: `~/Documents/obsidian/mixiaomi`
+
+- 知识库操作（写入、检索、综合、洞察、浏览）→ 使用 `kb` skill
+- X/Twitter 链接保存 → 使用 `x2md` skill
+- 两个 skill 共享同一套分类体系和 frontmatter 规范
+
+---
+
 **Version**: 3.1.0
 **Last Updated**: 2026-02-05
 **Major Changes**:

@@ -10,6 +10,7 @@ LOCK_FILE="/private/tmp/claude-config-sync.lock"
 
 # Files to sync directly (relative to CLAUDE_DIR)
 SYNC_FILES=(
+    "README.md"
     "CLAUDE.md"
     "AUTO_APPROVE_GUIDE.md"
     "CONFIG_PACKAGE_GUIDE.md"

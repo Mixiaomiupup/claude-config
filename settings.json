@@ -7,48 +7,11 @@
   },
   "permissions": {
     "allow": [
-      "Bash(open:*)",
       "WebSearch",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(osascript:*)",
-      "Bash(defaults:*)",
-      "Bash(echo:*)",
-      "Bash(brew install:*)",
-      "Bash(pip3 install:*)",
-      "Bash(ruff check:*)",
-      "Bash(python3:*)",
-      "Bash(tar:*)",
-      "Bash(for skill in commit debug explain python-style refactor review test)",
-      "Bash(do if [ -f ~/.claude/skills/$skill/SKILL.md ])",
-      "Bash(then echo '   ✓ $skill/SKILL.md' else echo '   ✗ $skill/SKILL.md \\(缺失\\)' fi done)",
-      "Bash(git --version:*)",
-      "Bash(git init:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git remote add origin:*)",
-      "Bash(git push:*)",
-      "Bash(ssh:*)",
-      "Bash(git config:*)",
-      "Bash(git remote set-url:*)",
-      "Bash(claude plugin install:*)",
-      "Bash(claude plugin marketplace list:*)",
-      "Bash(claude plugin:*)",
-      "Bash(find:*)",
-      "Bash(tree:*)",
-      "Bash(chmod:*)",
+      "Bash(open:*)",
       "Bash(.claude/package-config.sh)",
-      "Bash(brew:*)",
       "Bash(git -C /opt/homebrew/Library/Taps/homebrew/homebrew-core remote get-url:*)",
-      "Bash(git -C /opt/homebrew/Library/Taps/homebrew/homebrew-cask remote get-url:*)",
-      "Bash(export HOMEBREW_BREW_GIT_REMOTE=\"https://mirrors.aliyun.com/homebrew/brew.git\")",
-      "Bash(export HOMEBREW_CORE_GIT_REMOTE=\"https://mirrors.aliyun.com/homebrew/homebrew-core.git\")",
-      "Bash(export HOMEBREW_BOTTLE_DOMAIN=\"https://mirrors.aliyun.com/homebrew/homebrew-bottles\")",
-      "Bash(export HOMEBREW_API_DOMAIN=\"https://mirrors.aliyun.com/homebrew-bottles/api\")",
-      "Bash(ps:*)",
-      "Bash(zsh:*)",
-      "Bash(env)",
-      "Bash(gemini:*)"
+      "Bash(git -C /opt/homebrew/Library/Taps/homebrew/homebrew-cask remote get-url:*)"
     ],
     "defaultMode": "default"
   },
@@ -116,6 +79,66 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/auto-approve-safe.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-approve-read.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Glob|Grep|WebFetch|Task.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-approve-tools.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-approve-write.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__yunxiao__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__tavily__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__ucal__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'",
             "timeout": 5
           }
         ]
