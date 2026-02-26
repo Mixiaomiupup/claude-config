@@ -3,7 +3,7 @@
 # Replaces: sync-to-remote.sh, sync-skills.sh, restore-from-remote.sh
 #
 # Usage:
-#   cc-sync push [--target config|skills|all] [--platform github|yunxiao|all] [--dry-run] [-m "msg"]
+#   cc-sync push [--target config|skills|all] [--platform github|yunxiao|all] [--dry-run] [--yes] [-m "msg"]
 #   cc-sync pull [--target config|skills|all] [--from github|yunxiao]
 #   cc-sync status
 set -euo pipefail
@@ -20,7 +20,7 @@ usage() {
 cc-sync — Unified Claude Code config & skills sync
 
 Usage:
-  cc-sync push   [--target config|skills|all] [--platform github|yunxiao|all] [--dry-run] [-m "msg"]
+  cc-sync push   [--target config|skills|all] [--platform github|yunxiao|all] [--dry-run] [--yes] [-m "msg"]
   cc-sync pull   [--target config|skills|all] [--from github|yunxiao] [--dry-run]
   cc-sync status
 
@@ -34,6 +34,7 @@ Options:
   --platform  Which remote platform to push to (default: all)
   --from      Which remote platform to pull from (default: github)
   --dry-run   Preview changes without committing/pushing
+  --yes       Skip confirmation prompt (auto-confirm)
   -m "msg"    Custom commit message
 USAGE
     exit 0
@@ -88,7 +89,7 @@ push_to_remote() {
 #  push_config — sync config repo (no skills)
 # ============================================================
 push_config() {
-    local dry_run="$1" custom_msg="$2" platform="$3"
+    local dry_run="$1" custom_msg="$2" platform="$3" auto_confirm="$4"
 
     echo "==> [config] Preparing staging: $CONFIG_STAGING_DIR"
     if [ -d "$CONFIG_STAGING_DIR/.git" ]; then
@@ -237,11 +238,13 @@ push_config() {
     # --- Show full diff and confirm ---
     git diff --cached
     echo ""
-    read -rp "[config] Commit and push these changes? [y/N] " confirm
-    if [[ "$confirm" != [yY] ]]; then
-        echo "Aborted."
-        git reset HEAD --quiet
-        return 0
+    if [[ "$auto_confirm" != "true" ]]; then
+        read -rp "[config] Commit and push these changes? [y/N] " confirm
+        if [[ "$confirm" != [yY] ]]; then
+            echo "Aborted."
+            git reset HEAD --quiet
+            return 0
+        fi
     fi
 
     # --- Commit ---
@@ -284,7 +287,7 @@ push_config() {
 #  push_skills — sync skills repo (with sanitization)
 # ============================================================
 push_skills() {
-    local dry_run="$1" custom_msg="$2" platform="$3"
+    local dry_run="$1" custom_msg="$2" platform="$3" auto_confirm="$4"
     local skills_dir="$CLAUDE_DIR/skills"
 
     echo "==> [skills] Preparing staging: $SKILLS_STAGING_DIR"
@@ -332,31 +335,29 @@ push_skills() {
     rsync -a --delete "${rsync_excludes[@]}" "$skills_dir/" "$SKILLS_STAGING_DIR/"
     echo "  synced: skills/ (excluding: ${EXCLUDE_SKILLS[*]})"
 
-    # --- Sanitize server/SKILL.md ---
+    # --- Sanitize skills files per manifest ---
     echo "==> [skills] Sanitizing sensitive content..."
-    local server_skill="$SKILLS_STAGING_DIR/server/SKILL.md"
-    if [ -f "$server_skill" ]; then
-        # Read patterns from manifest
-        local manifest="$CLAUDE_DIR/component-manifest.json"
-        if [ -f "$manifest" ]; then
-            local pattern_count
-            pattern_count=$(jq -r '.sanitize["skills/server/SKILL.md"].patterns | length' "$manifest")
-            for ((i = 0; i < pattern_count; i++)); do
-                local pattern replacement
-                pattern=$(jq -r ".sanitize[\"skills/server/SKILL.md\"].patterns[$i][0]" "$manifest")
-                replacement=$(jq -r ".sanitize[\"skills/server/SKILL.md\"].patterns[$i][1]" "$manifest")
-                sed -i '' "s/${pattern}/${replacement}/g" "$server_skill"
-            done
-            echo "  sanitized: server/SKILL.md ($pattern_count patterns applied)"
-        else
-            echo "  warn: manifest not found, using hardcoded patterns"
-            sed -i '' \
-                -e 's/mi954993689\.\./YOUR_PASSWORD_HERE/g' \
-                -e 's/106\.15\.125\.84/YOUR_SERVER_IP/g' \
-                -e 's/172\.24\.17\.232/YOUR_PRIVATE_IP/g' \
-                "$server_skill"
-            echo "  sanitized: server/SKILL.md (hardcoded patterns)"
-        fi
+    local manifest="$CLAUDE_DIR/component-manifest.json"
+    if [ -f "$manifest" ]; then
+        local sanitize_keys
+        sanitize_keys=$(jq -r '.sanitize | keys[]' "$manifest" | grep '^skills/')
+        for sanitize_key in $sanitize_keys; do
+            local rel_path="${sanitize_key#skills/}"
+            local target_file="$SKILLS_STAGING_DIR/$rel_path"
+            if [ -f "$target_file" ]; then
+                local pattern_count
+                pattern_count=$(jq -r ".sanitize[\"$sanitize_key\"].patterns | length" "$manifest")
+                for ((i = 0; i < pattern_count; i++)); do
+                    local pattern replacement
+                    pattern=$(jq -r ".sanitize[\"$sanitize_key\"].patterns[$i][0]" "$manifest")
+                    replacement=$(jq -r ".sanitize[\"$sanitize_key\"].patterns[$i][1]" "$manifest")
+                    sed -i '' "s/${pattern}/${replacement}/g" "$target_file"
+                done
+                echo "  sanitized: $rel_path ($pattern_count patterns applied)"
+            fi
+        done
+    else
+        echo "  warn: manifest not found, skipping skills sanitization"
     fi
 
     # --- Check for changes ---
@@ -386,11 +387,13 @@ push_skills() {
     # --- Show full diff and confirm ---
     git diff --cached
     echo ""
-    read -rp "[skills] Commit and push these changes? [y/N] " confirm
-    if [[ "$confirm" != [yY] ]]; then
-        echo "Aborted."
-        git reset HEAD --quiet
-        return 0
+    if [[ "$auto_confirm" != "true" ]]; then
+        read -rp "[skills] Commit and push these changes? [y/N] " confirm
+        if [[ "$confirm" != [yY] ]]; then
+            echo "Aborted."
+            git reset HEAD --quiet
+            return 0
+        fi
     fi
 
     # --- Commit ---
@@ -654,11 +657,12 @@ pull_skills() {
 #  cmd_push — push subcommand dispatcher
 # ============================================================
 cmd_push() {
-    local dry_run=false custom_msg="" target="all" platform="all"
+    local dry_run=false custom_msg="" target="all" platform="all" auto_confirm=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --dry-run)  dry_run=true; shift ;;
+            --yes|-y)   auto_confirm=true; shift ;;
             -m)         custom_msg="$2"; shift 2 ;;
             --target)   target="$2"; shift 2 ;;
             --platform) platform="$2"; shift 2 ;;
@@ -680,14 +684,14 @@ cmd_push() {
     check_deps
 
     case "$target" in
-        config) push_config "$dry_run" "$custom_msg" "$platform" ;;
-        skills) push_skills "$dry_run" "$custom_msg" "$platform" ;;
+        config) push_config "$dry_run" "$custom_msg" "$platform" "$auto_confirm" ;;
+        skills) push_skills "$dry_run" "$custom_msg" "$platform" "$auto_confirm" ;;
         all)
-            push_config "$dry_run" "$custom_msg" "$platform"
+            push_config "$dry_run" "$custom_msg" "$platform" "$auto_confirm"
             echo ""
             echo "=========================================="
             echo ""
-            push_skills "$dry_run" "$custom_msg" "$platform"
+            push_skills "$dry_run" "$custom_msg" "$platform" "$auto_confirm"
             ;;
     esac
 }

@@ -16,6 +16,7 @@
       "debug",
       "doc-control",
       "explain",
+      "gemini-image",
       "kb",
       "python-style",
       "refactor",
@@ -41,6 +42,18 @@
       ],
       "strip_fields": [
         "model"
+      ]
+    },
+    "skills/gemini-image/SKILL.md": {
+      "patterns": [
+        [
+          "uxfv3f-ogqz-cc08ce285c88\\.json",
+          "YOUR_SERVICE_ACCOUNT_FILE"
+        ],
+        [
+          "uxfv3f-ogqz",
+          "YOUR_GCP_PROJECT"
+        ]
       ]
     },
     "skills/server/SKILL.md": {
