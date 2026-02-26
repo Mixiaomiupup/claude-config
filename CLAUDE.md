@@ -714,6 +714,23 @@ brainstorming → using-git-worktrees → writing-plans → executing-plans → 
 - Large system-level changes (Level 3)
 - Strategy: Create `docs/ARCHITECTURE.md` for design → Use Superpowers for implementation (`docs/plans/2026-02-02-*.md`)
 
+### 7.6 Superpowers 计划文件路径解析
+
+**注意: CWD 通常是 `/Users/mixiaomiupup/projects`（父目录），不在任何项目内。**
+
+使用 `brainstorming` 或 `writing-plans` skill 时，skill 中的 `docs/plans/` 指的是**项目**的 `docs/plans/`，不是 CWD 的。
+
+**必须在保存计划文件前执行以下步骤**:
+
+1. **从对话上下文确定目标项目**（用户在讨论哪个项目的功能）
+2. **确认项目存在**: `ls /Users/mixiaomiupup/projects/<project>/.git`
+3. **确保目录存在**: `mkdir -p /Users/mixiaomiupup/projects/<project>/docs/plans`
+4. **使用绝对路径保存**: `/Users/mixiaomiupup/projects/<project>/docs/plans/YYYY-MM-DD-<feature>.md`
+
+**无法确定项目时，询问用户。**
+
+**此规则不适用于 Claude Code 内置 plan mode 文件**（随机词命名，如 `curried-honking-meteor.md`），它们正确地属于 `~/.claude/plans/`。
+
 ---
 
 ## 8. Personal Knowledge Base (Obsidian)

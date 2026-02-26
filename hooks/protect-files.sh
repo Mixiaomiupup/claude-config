@@ -62,5 +62,41 @@ for pattern in "${WARNING_PATTERNS[@]}"; do
   fi
 done
 
+# ========================================================
+# Superpowers 计划文件路径强制
+# YYYY-MM-DD-*.md 不允许写入 ~/.claude/plans/
+# 内置 plan mode 文件（随机词命名）不受影响
+# ========================================================
+if [[ "$FILE" == "$HOME/.claude/plans/"* ]]; then
+  FILENAME=$(basename "$FILE")
+
+  # 仅拦截 Superpowers 命名格式: YYYY-MM-DD-*.md
+  if [[ "$FILENAME" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-.+\.md$ ]]; then
+    # 列出可用项目（有 .git 的目录）
+    PROJECTS=""
+    for proj_dir in "$HOME/projects"/*/; do
+      if [ -d "${proj_dir}.git" ]; then
+        PROJECTS="$PROJECTS $(basename "$proj_dir")"
+      fi
+    done
+
+    jq -n --arg file "$FILE" --arg filename "$FILENAME" --arg projects "$PROJECTS" '{
+      "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": (
+          "Superpowers plan \"" + $filename + "\" must go to a project directory, not ~/.claude/plans/.\n" +
+          "Correct path: /Users/mixiaomiupup/projects/<project>/docs/plans/" + $filename + "\n" +
+          "Available projects:" + $projects + "\n\n" +
+          "Determine the target project from conversation context, mkdir -p the docs/plans/ dir if needed, then use the absolute path."
+        )
+      }
+    }'
+    exit 0
+  fi
+
+  # 非 YYYY-MM-DD 文件（内置 plan mode）→ 放行
+fi
+
 # 文件安全，允许修改
 exit 0

@@ -21,4 +21,11 @@ if git rev-parse --git-dir > /dev/null 2>&1; then
   echo "🌿 Git 分支: $BRANCH"
 fi
 
+# 列出可用项目
+PROJECTS_DIR="$HOME/projects"
+if [ -d "$PROJECTS_DIR" ]; then
+  PROJECTS=$(ls -d "$PROJECTS_DIR"/*/.git 2>/dev/null | while read g; do basename "$(dirname "$g")"; done | sort | tr '\n' ' ')
+  [ -n "$PROJECTS" ] && echo "📂 Projects: $PROJECTS"
+fi
+
 exit 0
