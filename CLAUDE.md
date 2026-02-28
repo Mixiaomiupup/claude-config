@@ -469,6 +469,41 @@ Level 3 (系统级): brainstorming → writing-plans → executing-plans → fin
 
 **Best Practice**: 在提出代码变更前先读取文件
 
+### 4.5 Web Search and Fetch Tools
+
+**Purpose**: 搜索和抓取网页内容
+
+**3 套工具体系**:
+- **Built-in**: WebSearch, WebFetch（受环境限制，当前不稳定）
+- **Tavily MCP**: tavily_search, tavily_extract, tavily_map, tavily_crawl, tavily_research
+- **ucal MCP**: ucal_platform_search, ucal_platform_read, ucal_browser_action（需先 ToolSearch 加载）
+
+**工具优先级**:
+
+| 场景 | 首选工具 | 降级方案 | 原因 |
+|------|---------|---------|------|
+| 搜索信息 | tavily_search | WebSearch | 覆盖广、支持域名/时间过滤、不受地区限制 |
+| 读取已知 URL（静态页） | tavily_extract | ucal_platform_read(generic) | 快速，主流站效果好 |
+| 读取 JS 渲染页面 | ucal_platform_read(generic) | ucal_browser_action | 真实浏览器渲染，内容完整 |
+| 中国平台(xhs/zhihu/x) | ucal_platform_read(平台名) | - | 平台特定适配+评论/互动数据 |
+| 飞书文档 | lark-mcp | - | 专用工具，不走 web 抓取 |
+| 爬取站点多页 | tavily_crawl + tavily_map | - | 专为多页设计 |
+| 综合调研 | tavily_research | - | 多源自动综合，质量极高 |
+| GitHub 内容 | gh CLI | tavily_extract | CLI 格式更好，避免 UI 噪音 |
+| 页面交互(点击/填表) | ucal_browser_action | - | 唯一能做浏览器交互 |
+
+**降级规则**:
+- tavily_extract 内容不完整/空 → ucal_platform_read(generic)
+- WebFetch 域名被拦 → tavily_extract → ucal_platform_read(generic)
+- WebSearch 无结果(小众站) → tavily_search(include_domains=[...])
+- ucal 无法访问某站(地区限制) → tavily_extract
+
+**已知限制**:
+- **WebFetch/WebSearch**: 当前环境不稳定，多数域名被拦截；WebSearch 文档标注仅美国可用
+- **tavily**: 无 JS 渲染能力；小众中文站有时搜不到（但优于 WebSearch）
+- **ucal**: 较慢（真实浏览器）；浏览器在中国区运行，海外受地区限制站点不通；xhs/zhihu 需先 ucal_platform_login；需 ToolSearch 先加载
+- **飞书**: 所有 web 工具都无法有效抓取飞书文档，必须用 lark-mcp
+
 ---
 
 ## 5. Project vs Global Configuration

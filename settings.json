@@ -138,6 +138,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "mcp__lark-mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Notification": [
