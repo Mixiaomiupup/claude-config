@@ -3,11 +3,11 @@
   "remotes": {
     "config": {
       "github": "git@github.com:Mixiaomiupup/claude-config.git",
-      "yunxiao": "git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_config.git"
+      "yunxiao": "git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Common-Components/claude_config.git"
     },
     "skills": {
       "github": "git@github.com:Mixiaomiupup/claude-skills.git",
-      "yunxiao": "git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_skills.git"
+      "yunxiao": "git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Common-Components/claude_skills.git"
     }
   },
   "skills": {

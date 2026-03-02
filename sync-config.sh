@@ -7,13 +7,13 @@ CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 # ---- Config repo (GitHub primary) ----
 CONFIG_GITHUB_URL="git@github.com:Mixiaomiupup/claude-config.git"
 CONFIG_GITHUB_BRANCH="main"
-CONFIG_YUNXIAO_URL="git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_config.git"
+CONFIG_YUNXIAO_URL="git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Common-Components/claude_config.git"
 CONFIG_YUNXIAO_BRANCH="master"
 
 # ---- Skills repo (dual-mirror) ----
 SKILLS_GITHUB_URL="git@github.com:Mixiaomiupup/claude-skills.git"
 SKILLS_GITHUB_BRANCH="main"
-SKILLS_YUNXIAO_URL="git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Innovation-Project/dade-flexible-welding/claude_skills.git"
+SKILLS_YUNXIAO_URL="git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/Common-Components/claude_skills.git"
 SKILLS_YUNXIAO_BRANCH="master"
 
 # ---- Staging directories ----
