@@ -54,9 +54,12 @@ claude-config/
 │   ├── refactor/                    # 代码重构建议
 │   ├── remote-repos/                # 远程仓库操作
 │   ├── review/                      # 代码审查
+│   ├── gemini-image/                 # Gemini AI 图片工具
+│   ├── lark-mcp/                    # 飞书 MCP 集成
 │   ├── server/                      # 服务器管理
 │   ├── sync-config/                 # 配置同步
 │   ├── test/                        # 测试生成
+│   ├── ucal/                        # 跨平台内容分析
 │   └── x2md/                        # X/Twitter 转 Markdown
 │
 ├── agents/                          # 自定义 agent 定义
@@ -85,7 +88,7 @@ claude-config/
    auto-approve-read.sh  → Read: 全部（敏感文件除外）
    auto-approve-write.sh → Write/Edit: 全部（敏感文件除外）
    auto-approve-tools.sh → Glob/Grep/WebFetch/Task: 全部
-   inline hooks          → mcp__yunxiao/tavily/ucal__: 全部
+   inline hooks          → mcp__yunxiao/tavily/ucal/lark-mcp__: 全部
 
 ③ 弹窗问用户
 ```
@@ -134,6 +137,7 @@ cp /tmp/claude-config/restore-from-remote.sh ~/.claude/
 | 自动批准系统架构 | 2.0.0 | 2026-02-22 |
 | 全局工作流 (CLAUDE.md) | 3.1.0 | 2026-02-05 |
 | 配置同步系统 | 1.0.0 | 2026-02-05 |
+| 能力全景指南 | 1.0.0 | 2026-03-01 |
 
 ---
 

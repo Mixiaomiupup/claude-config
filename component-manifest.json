@@ -26,7 +26,8 @@
       "sync-config",
       "test",
       "ucal",
-      "x2md"
+      "x2md",
+      "lark-mcp"
     ],
     "third-party": {
       "baoyu-skills": {

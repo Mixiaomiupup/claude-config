@@ -34,6 +34,7 @@ SYNC_FILES=(
     "CLAUDE.md"
     "AUTO_APPROVE_GUIDE.md"
     "CONFIG_PACKAGE_GUIDE.md"
+    "CC_SYNC_GUIDE.md"
     "settings.local.json"
     "sync-config.sh"
     "cc-sync"
