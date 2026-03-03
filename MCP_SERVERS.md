@@ -22,4 +22,7 @@
 | YOUR_LARK_APP_SECRET | 飞书开放平台 → 应用 → App Secret |
 | YOUR_YUNXIAO_ACCESS_TOKEN_HERE | 云效 → 个人设置 → 个人访问令牌 |
 
-4. ucal 需额外操作：克隆 ucal 项目到 ~/projects/ucal
+4. ucal 需额外操作：
+   ```bash
+   git clone git@github.com:Mixiaomiupup/ucal.git ~/projects/ucal
+   ```
