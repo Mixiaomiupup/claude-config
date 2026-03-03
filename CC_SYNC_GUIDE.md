@@ -1,5 +1,7 @@
 # Claude Code 配置同步系统（cc-sync）
 
+> 将 `~/.claude/` 下的 hooks、settings、skills 等配置脱敏后同步到 GitHub 和云效，支持新机器一键恢复。
+
 **版本**: 1.0.0
 **更新日期**: 2026-03-02
 **设计原则**: config 和 skills 分仓管理，manifest 驱动脱敏，双平台镜像推送
