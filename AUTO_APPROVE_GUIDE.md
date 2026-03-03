@@ -324,8 +324,7 @@ TaskList  TaskGet  TaskUpdate  TaskCreate
 ├── auto-approve-audit.log           # 审计日志（auto-approve-safe.sh 写入）
 ├── AUTO_APPROVE_GUIDE.md            # 本文档
 ├── sync-config.sh                   # 同步配置（含同步文件列表）
-├── sync-to-remote.sh                # 推送到 claude-config 仓库
-├── restore-from-remote.sh           # 从远程恢复
+├── cc-sync                          # 统一同步 CLI (push/pull/status)
 └── hooks/
     ├── auto-approve-safe.sh         # Layer 2: Bash 命令批准 (SAFE/CAREFUL)
     ├── auto-approve-read.sh         # Layer 2: Read 工具批准 (排除敏感文件)
@@ -356,7 +355,7 @@ TaskList  TaskGet  TaskUpdate  TaskCreate
 | `AUTO_APPROVE_GUIDE.md` | claude-config | 原样 |
 | `skills/` 目录 | claude-config + claude-skills | 原样 |
 
-同步命令：`~/.claude/sync-to-remote.sh`
+同步命令：`~/.claude/cc-sync push`
 
 ---
 
