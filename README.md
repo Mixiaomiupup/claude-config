@@ -9,6 +9,8 @@
 | [AUTO_APPROVE_GUIDE.md](AUTO_APPROVE_GUIDE.md) | **自动批准系统架构** — 三层权限体系、设计决策、维护操作 |
 | [CLAUDE.md](CLAUDE.md) | **全局开发工作流** — Level 1-3 分级、代码标准、Superpowers 整合 |
 | [CONFIG_PACKAGE_GUIDE.md](CONFIG_PACKAGE_GUIDE.md) | **配置包指南** — 安装/恢复/同步说明 |
+| [CC_SYNC_GUIDE.md](CC_SYNC_GUIDE.md) | **cc-sync 使用指南** — push/pull/status 命令详解 |
+| [MCP_SERVERS.md](MCP_SERVERS.md) | **MCP 服务器配置** — 新机器密钥填写指南 |
 | [hooks/README.md](hooks/README.md) | **Hooks 使用说明** — 各 hook 分类、自定义方法、调试 |
 | [hooks/QUICK_REFERENCE.md](hooks/QUICK_REFERENCE.md) | **Hooks 速查卡** — 一页纸速查 |
 
@@ -22,14 +24,16 @@ claude-config/
 ├── AUTO_APPROVE_GUIDE.md            # 自动批准系统架构文档
 ├── CLAUDE.md                        # 全局开发工作流配置
 ├── CONFIG_PACKAGE_GUIDE.md          # 配置包使用指南
+├── CC_SYNC_GUIDE.md                 # cc-sync 使用指南
+├── MCP_SERVERS.md                   # MCP 服务器新机器配置指南
 │
 ├── settings.json                    # 全局设置（已脱敏：token→placeholder, model→删除）
 ├── settings.local.json              # 扩展设置（hooks 盲区的工具/命令）
+├── mcp-servers.json                 # MCP 服务器配置（已脱敏，push 时从 ~/.claude.json 提取）
+├── component-manifest.json          # 组件清单（skills 来源、脱敏规则）
 │
+├── cc-sync                          # 统一同步 CLI（push/pull/status）
 ├── sync-config.sh                   # 同步共享配置变量
-├── sync-to-remote.sh                # 本地 → 远程同步
-├── restore-from-remote.sh           # 远程 → 本地恢复
-├── skill-sources.json               # 第三方 skill 来源记录
 │
 ├── hooks/                           # Hook 脚本
 │   ├── auto-approve-safe.sh         # Bash 命令自动批准（SAFE/CAREFUL/COMPOUND）
@@ -106,27 +110,38 @@ claude-config/
 ### 新机器恢复
 
 ```bash
-git clone git@github.com:Mixiaomiupup/claude-config.git /tmp/claude-config
-cp /tmp/claude-config/restore-from-remote.sh ~/.claude/
-~/.claude/restore-from-remote.sh          # 完整恢复（自动备份现有配置）
-~/.claude/restore-from-remote.sh --only skills hooks  # 选择性恢复
+# 1. Bootstrap
+git clone git@github.com:Mixiaomiupup/claude-config.git /tmp/cc
+cp /tmp/cc/{cc-sync,sync-config.sh,component-manifest.json} ~/.claude/
+chmod +x ~/.claude/cc-sync
+
+# 2. Pull 全部配置和 skills
+~/.claude/cc-sync pull
+
+# 3. 填入密钥
+#    - ~/.claude/settings.json 中的 ANTHROPIC_AUTH_TOKEN
+#    - ~/.claude.json 中搜索 YOUR_ 填入 MCP 密钥（见 MCP_SERVERS.md）
 ```
 
 恢复脚本自动处理：
 - 备份现有 `~/.claude/` 到 `~/.claude.backup.YYYYMMDD_HHMMSS/`
 - `settings.json` 合并：保留本地 token，其余从仓库恢复
-- 根据 `skill-sources.json` 自动 clone 第三方 skill
+- MCP 配置合并：保留本地密钥，新增 repo 中的服务器
+- 根据 `component-manifest.json` 自动 clone 第三方 skill
 - 恢复 hook 可执行权限
 
 ### 日常同步
 
 ```bash
-~/.claude/sync-to-remote.sh              # 同步并推送（会提示确认）
-~/.claude/sync-to-remote.sh --dry-run    # 仅预览变更
-~/.claude/sync-to-remote.sh -m "message" # 自定义提交信息
+~/.claude/cc-sync push --dry-run         # 预览变更
+~/.claude/cc-sync push                   # 同步并推送（会提示确认）
+~/.claude/cc-sync push -m "message"      # 自定义提交信息
+~/.claude/cc-sync status                 # 查看同步状态
 ```
 
-脱敏处理：`settings.json` 中 `ANTHROPIC_AUTH_TOKEN` → `"YOUR_TOKEN_HERE"`，`model` 字段删除。
+脱敏处理：
+- `settings.json`：`ANTHROPIC_AUTH_TOKEN` → `"YOUR_TOKEN_HERE"`，`model` 字段删除
+- `mcp-servers.json`：API key → 占位符，lark 密钥 → 占位符，路径 → `$HOME`
 
 ---
 
