@@ -39,6 +39,7 @@ SYNC_FILES=(
     "sync-config.sh"
     "cc-sync"
     "component-manifest.json"
+    "MCP_SERVERS.md"
 )
 
 # Directories to sync via rsync for config repo (relative to CLAUDE_DIR)

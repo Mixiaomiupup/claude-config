@@ -211,6 +211,76 @@ push_config() {
         echo "  synced: plugins/ (excluding cache)"
     fi
 
+    # --- Extract and sanitize MCP servers ---
+    echo "==> [config] Extracting MCP servers from ~/.claude.json..."
+    local claude_json="$HOME/.claude.json"
+    local manifest="$CLAUDE_DIR/component-manifest.json"
+    if [ -f "$claude_json" ] && [ -f "$manifest" ]; then
+        local mcp_json
+        mcp_json=$(jq '.mcpServers // {}' "$claude_json")
+
+        if [ "$(echo "$mcp_json" | jq 'length')" -gt 0 ]; then
+            # Sanitize env_keys (tavily.env.TAVILY_API_KEY, yunxiao.env.YUNXIAO_ACCESS_TOKEN)
+            local env_servers
+            env_servers=$(jq -r '.sanitize["mcp-servers.json"].env_keys | keys[]' "$manifest" 2>/dev/null || echo "")
+            for server in $env_servers; do
+                local env_key_list
+                env_key_list=$(jq -r ".sanitize[\"mcp-servers.json\"].env_keys[\"$server\"][]" "$manifest" 2>/dev/null || echo "")
+                for env_key in $env_key_list; do
+                    local placeholder="YOUR_${env_key}_HERE"
+                    mcp_json=$(echo "$mcp_json" | jq --arg srv "$server" --arg k "$env_key" --arg p "$placeholder" '
+                        if .[$srv].env[$k] then .[$srv].env[$k] = $p else . end
+                    ')
+                done
+            done
+
+            # Sanitize args_secrets (lark-mcp: -a, -s flags)
+            local args_servers
+            args_servers=$(jq -r '.sanitize["mcp-servers.json"].args_secrets | keys[]' "$manifest" 2>/dev/null || echo "")
+            for server in $args_servers; do
+                local secret_count
+                secret_count=$(jq -r ".sanitize[\"mcp-servers.json\"].args_secrets[\"$server\"] | length" "$manifest")
+                for ((i = 0; i < secret_count; i++)); do
+                    local flag placeholder
+                    flag=$(jq -r ".sanitize[\"mcp-servers.json\"].args_secrets[\"$server\"][$i].after_flag" "$manifest")
+                    placeholder=$(jq -r ".sanitize[\"mcp-servers.json\"].args_secrets[\"$server\"][$i].placeholder" "$manifest")
+                    mcp_json=$(echo "$mcp_json" | jq --arg srv "$server" --arg flag "$flag" --arg ph "$placeholder" '
+                        if .[$srv].args then
+                            .[$srv].args as $args |
+                            reduce range(0; $args | length) as $idx (
+                                .;
+                                if ($args[$idx] == $flag) and ($idx + 1 < ($args | length)) then
+                                    .[$srv].args[$idx + 1] = $ph
+                                else . end
+                            )
+                        else . end
+                    ')
+                done
+            done
+
+            # Normalize paths (ucal: replace /Users/xxx with $HOME)
+            local path_servers
+            path_servers=$(jq -r '.sanitize["mcp-servers.json"].path_normalize[]' "$manifest" 2>/dev/null || echo "")
+            for server in $path_servers; do
+                mcp_json=$(echo "$mcp_json" | jq --arg srv "$server" --arg home "$HOME" '
+                    if .[$srv].command then
+                        .[$srv].command = (.[$srv].command | gsub($home; "$HOME"))
+                    else . end |
+                    if .[$srv].args then
+                        .[$srv].args = [.[$srv].args[] | gsub($home; "$HOME")]
+                    else . end
+                ')
+            done
+
+            echo "$mcp_json" | jq '.' > "$CONFIG_STAGING_DIR/mcp-servers.json"
+            echo "  sanitized: mcp-servers.json ($(echo "$mcp_json" | jq 'keys | length') servers)"
+        else
+            echo "  skipped: no mcpServers in ~/.claude.json"
+        fi
+    else
+        echo "  skipped: ~/.claude.json or manifest not found"
+    fi
+
     # --- Check for changes ---
     echo ""
     echo "==> [config] Checking for changes..."
@@ -570,6 +640,132 @@ pull_config() {
         fi
     fi
 
+    # --- Merge MCP servers into ~/.claude.json ---
+    echo "==> [config] Merging MCP servers..."
+    local repo_mcp="$CONFIG_STAGING_DIR/mcp-servers.json"
+    local claude_json="$HOME/.claude.json"
+    local manifest="$CLAUDE_DIR/component-manifest.json"
+
+    if [ -f "$repo_mcp" ]; then
+        if $dry_run; then
+            local server_count
+            server_count=$(jq 'keys | length' "$repo_mcp")
+            echo "  [DRY RUN] would merge $server_count MCP servers into ~/.claude.json"
+        else
+            # Expand $HOME in paths for path_normalize servers
+            local repo_mcp_expanded
+            repo_mcp_expanded=$(cat "$repo_mcp")
+            if [ -f "$manifest" ]; then
+                local path_servers
+                path_servers=$(jq -r '.sanitize["mcp-servers.json"].path_normalize[]' "$manifest" 2>/dev/null || echo "")
+                for server in $path_servers; do
+                    repo_mcp_expanded=$(echo "$repo_mcp_expanded" | jq --arg srv "$server" --arg home "$HOME" '
+                        if .[$srv].command then
+                            .[$srv].command = (.[$srv].command | gsub("\\$HOME"; $home))
+                        else . end |
+                        if .[$srv].args then
+                            .[$srv].args = [.[$srv].args[] | gsub("\\$HOME"; $home)]
+                        else . end
+                    ')
+                done
+            fi
+
+            if [ -f "$claude_json" ]; then
+                local local_mcp
+                local_mcp=$(jq '.mcpServers // {}' "$claude_json")
+
+                # Restore secrets from local into repo config
+                local merged_mcp="$repo_mcp_expanded"
+
+                if [ -f "$manifest" ]; then
+                    # Restore env_keys
+                    local env_servers
+                    env_servers=$(jq -r '.sanitize["mcp-servers.json"].env_keys | keys[]' "$manifest" 2>/dev/null || echo "")
+                    for server in $env_servers; do
+                        local env_key_list
+                        env_key_list=$(jq -r ".sanitize[\"mcp-servers.json\"].env_keys[\"$server\"][]" "$manifest" 2>/dev/null || echo "")
+                        for env_key in $env_key_list; do
+                            local local_val
+                            local_val=$(echo "$local_mcp" | jq -r --arg srv "$server" --arg k "$env_key" '.[$srv].env[$k] // empty')
+                            if [ -n "$local_val" ] && [[ "$local_val" != YOUR_* ]]; then
+                                merged_mcp=$(echo "$merged_mcp" | jq --arg srv "$server" --arg k "$env_key" --arg v "$local_val" '
+                                    if .[$srv].env[$k] then .[$srv].env[$k] = $v else . end
+                                ')
+                            fi
+                        done
+                    done
+
+                    # Restore args_secrets
+                    local args_servers
+                    args_servers=$(jq -r '.sanitize["mcp-servers.json"].args_secrets | keys[]' "$manifest" 2>/dev/null || echo "")
+                    for server in $args_servers; do
+                        local secret_count
+                        secret_count=$(jq -r ".sanitize[\"mcp-servers.json\"].args_secrets[\"$server\"] | length" "$manifest")
+                        for ((i = 0; i < secret_count; i++)); do
+                            local flag placeholder
+                            flag=$(jq -r ".sanitize[\"mcp-servers.json\"].args_secrets[\"$server\"][$i].after_flag" "$manifest")
+                            placeholder=$(jq -r ".sanitize[\"mcp-servers.json\"].args_secrets[\"$server\"][$i].placeholder" "$manifest")
+                            # Find index of flag in local args and get the value after it
+                            local local_secret
+                            local_secret=$(echo "$local_mcp" | jq -r --arg srv "$server" --arg flag "$flag" '
+                                .[$srv].args // [] | to_entries[] |
+                                select(.value == $flag) |
+                                .key + 1
+                            ' | head -1)
+                            if [ -n "$local_secret" ]; then
+                                local actual_val
+                                actual_val=$(echo "$local_mcp" | jq -r --arg srv "$server" --argjson idx "$local_secret" '.[$srv].args[$idx] // empty')
+                                if [ -n "$actual_val" ] && [ "$actual_val" != "$placeholder" ]; then
+                                    # Find flag index in merged and replace next element
+                                    merged_mcp=$(echo "$merged_mcp" | jq --arg srv "$server" --arg flag "$flag" --arg val "$actual_val" '
+                                        if .[$srv].args then
+                                            .[$srv].args as $args |
+                                            reduce range(0; $args | length) as $idx (
+                                                .;
+                                                if ($args[$idx] == $flag) and ($idx + 1 < ($args | length)) then
+                                                    .[$srv].args[$idx + 1] = $val
+                                                else . end
+                                            )
+                                        else . end
+                                    ')
+                                fi
+                            fi
+                        done
+                    done
+                fi
+
+                # Merge: repo servers + local-only servers preserved
+                local final_mcp
+                final_mcp=$(echo "$local_mcp" | jq --argjson repo "$merged_mcp" '
+                    # Start with local (preserves local-only servers)
+                    # Override with repo versions (which now have restored secrets)
+                    . * $repo
+                ')
+
+                # Write back to ~/.claude.json
+                local updated_claude
+                updated_claude=$(jq --argjson mcp "$final_mcp" '.mcpServers = $mcp' "$claude_json")
+                echo "$updated_claude" | jq '.' > "$claude_json"
+                echo "  ✓ Merged MCP servers ($(echo "$final_mcp" | jq 'keys | length') servers)"
+
+                # Check for remaining placeholders
+                local placeholders
+                placeholders=$(echo "$final_mcp" | jq -r '.. | strings | select(startswith("YOUR_"))' 2>/dev/null | sort -u)
+                if [ -n "$placeholders" ]; then
+                    echo "  ⚠ Placeholders remaining (fill in ~/.claude.json):"
+                    while IFS= read -r ph; do
+                        echo "    - $ph"
+                    done <<< "$placeholders"
+                fi
+            else
+                # No local ~/.claude.json — create with MCP servers
+                echo "$repo_mcp_expanded" | jq '{mcpServers: .}' > "$claude_json"
+                echo "  ✓ Created ~/.claude.json with MCP servers"
+                echo "  ⚠ Fill in placeholder secrets — search for YOUR_ in ~/.claude.json"
+            fi
+        fi
+    fi
+
     # --- Fix permissions ---
     if ! $dry_run; then
         echo "==> [config] Fixing permissions..."
@@ -843,6 +1039,47 @@ cmd_status() {
                 echo "  ✗ $skill_name (not cloned)"
             fi
         done
+    fi
+
+    echo ""
+
+    # --- MCP servers ---
+    echo "[mcp servers]"
+    local claude_json="$HOME/.claude.json"
+    if [ -f "$claude_json" ]; then
+        local local_servers
+        local_servers=$(jq -r '.mcpServers // {} | keys[]' "$claude_json" 2>/dev/null)
+        local local_count
+        local_count=$(echo "$local_servers" | grep -c . 2>/dev/null || echo "0")
+        echo "  local: $local_count servers ($(echo "$local_servers" | tr '\n' ' '))"
+
+        # Compare with repo version
+        local repo_mcp="$CONFIG_STAGING_DIR/mcp-servers.json"
+        if [ -f "$repo_mcp" ]; then
+            local repo_servers
+            repo_servers=$(jq -r 'keys[]' "$repo_mcp" 2>/dev/null)
+            local repo_count
+            repo_count=$(echo "$repo_servers" | grep -c . 2>/dev/null || echo "0")
+            echo "  repo:  $repo_count servers ($(echo "$repo_servers" | tr '\n' ' '))"
+
+            # Show differences
+            local only_local only_repo
+            only_local=$(comm -23 <(echo "$local_servers" | sort) <(echo "$repo_servers" | sort) 2>/dev/null)
+            only_repo=$(comm -13 <(echo "$local_servers" | sort) <(echo "$repo_servers" | sort) 2>/dev/null)
+            if [ -n "$only_local" ]; then
+                echo "  local only: $only_local"
+            fi
+            if [ -n "$only_repo" ]; then
+                echo "  repo only: $only_repo"
+            fi
+            if [ -z "$only_local" ] && [ -z "$only_repo" ]; then
+                echo "  status: ✓ server lists match"
+            fi
+        else
+            echo "  repo:  not synced yet (run push --target config)"
+        fi
+    else
+        echo "  ~/.claude.json not found"
     fi
 
     echo ""

@@ -57,6 +57,31 @@
         ]
       ]
     },
+    "mcp-servers.json": {
+      "env_keys": {
+        "tavily": [
+          "TAVILY_API_KEY"
+        ],
+        "yunxiao": [
+          "YUNXIAO_ACCESS_TOKEN"
+        ]
+      },
+      "args_secrets": {
+        "lark-mcp": [
+          {
+            "after_flag": "-a",
+            "placeholder": "YOUR_LARK_APP_ID"
+          },
+          {
+            "after_flag": "-s",
+            "placeholder": "YOUR_LARK_APP_SECRET"
+          }
+        ]
+      },
+      "path_normalize": [
+        "ucal"
+      ]
+    },
     "skills/server/SKILL.md": {
       "patterns": [
         [
