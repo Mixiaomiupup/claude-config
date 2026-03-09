@@ -18,7 +18,9 @@
       "Bash(nc -X 5 -x 127.0.0.1:7897 github.com 22 -v -w 5 2>&1; echo \"EXIT: $?\")",
       "Bash(timeout 8 ssh -vT -o ConnectTimeout=5 -o ProxyCommand=none git@codeup.aliyun.com 2>&1 || true)",
       "Bash(nc -z -w 5 106.15.125.84 22 2>&1; echo \"Server SSH: $?\")",
-      "Bash(nc -z -w 3 -G 3 106.15.125.84 22 2>&1; echo \"EXIT: $?\")"
+      "Bash(nc -z -w 3 -G 3 106.15.125.84 22 2>&1; echo \"EXIT: $?\")",
+      "Bash(fc-list | grep -i \"maple mono\")",
+      "Bash(fc-list | grep -i \"maple\" | head -5)"
     ]
   }
 }
