@@ -1,26 +1,6 @@
 {
   "version": 2,
   "plugins": {
-    "document-skills@anthropic-agent-skills": [
-      {
-        "scope": "user",
-        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/anthropic-agent-skills/document-skills/unknown",
-        "version": "unknown",
-        "installedAt": "2026-01-13T12:48:57.651Z",
-        "lastUpdated": "2026-01-13T12:48:57.651Z",
-        "isLocal": true
-      }
-    ],
-    "example-skills@anthropic-agent-skills": [
-      {
-        "scope": "user",
-        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/anthropic-agent-skills/example-skills/unknown",
-        "version": "unknown",
-        "installedAt": "2026-01-13T12:48:58.205Z",
-        "lastUpdated": "2026-01-13T12:48:58.205Z",
-        "isLocal": true
-      }
-    ],
     "superpowers@superpowers-marketplace": [
       {
         "scope": "user",
@@ -28,8 +8,7 @@
         "version": "4.0.3",
         "installedAt": "2026-01-14T02:07:25.670Z",
         "lastUpdated": "2026-01-14T02:07:25.670Z",
-        "gitCommitSha": "b9e16498b9b6b06defa34cf0d6d345cd2c13ad31",
-        "isLocal": false
+        "gitCommitSha": "b9e16498b9b6b06defa34cf0d6d345cd2c13ad31"
       }
     ],
     "planning-with-files@planning-with-files": [
@@ -38,8 +17,7 @@
         "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/planning-with-files/planning-with-files/2.1.2",
         "version": "2.1.2",
         "installedAt": "2026-01-14T03:27:58.805Z",
-        "lastUpdated": "2026-01-14T03:27:58.805Z",
-        "isLocal": true
+        "lastUpdated": "2026-01-14T03:27:58.805Z"
       }
     ],
     "code-simplifier@claude-plugins-official": [
@@ -48,8 +26,27 @@
         "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/claude-plugins-official/code-simplifier/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-14T03:24:37.958Z",
-        "lastUpdated": "2026-01-14T03:24:37.958Z",
-        "isLocal": true
+        "lastUpdated": "2026-01-14T03:24:37.958Z"
+      }
+    ],
+    "document-skills@anthropic-agent-skills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/anthropic-agent-skills/document-skills/69c0b1a06741",
+        "version": "69c0b1a06741",
+        "installedAt": "2026-03-12T09:23:15.765Z",
+        "lastUpdated": "2026-03-12T09:23:15.765Z",
+        "gitCommitSha": "69c0b1a0674149f27b61b2635f935524b6add202"
+      }
+    ],
+    "example-skills@anthropic-agent-skills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/anthropic-agent-skills/example-skills/69c0b1a06741",
+        "version": "69c0b1a06741",
+        "installedAt": "2026-03-13T01:41:11.477Z",
+        "lastUpdated": "2026-03-13T01:41:11.477Z",
+        "gitCommitSha": "69c0b1a0674149f27b61b2635f935524b6add202"
       }
     ]
   }

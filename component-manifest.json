@@ -28,7 +28,8 @@
       "ucal",
       "x2md",
       "feishu",
-      "cover-image"
+      "cover-image",
+      "article-gen"
     ],
     "third-party": {
       "baoyu-skills": {

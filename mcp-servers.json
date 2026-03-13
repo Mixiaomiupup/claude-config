@@ -39,6 +39,24 @@
     ],
     "env": {}
   },
+  "project-bot": {
+    "type": "stdio",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@larksuiteoapi/lark-mcp",
+      "mcp",
+      "-a",
+      "cli_a939278503b9dbef",
+      "-s",
+      "Pc5UyKW0RsZsY7P4uUBdSh6XaGDqG4LQ",
+      "--token-mode",
+      "tenant_access_token",
+      "-t",
+      "all"
+    ],
+    "env": {}
+  },
   "yunxiao": {
     "type": "stdio",
     "command": "npx",
