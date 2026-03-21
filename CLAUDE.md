@@ -1,791 +1,117 @@
-# Global Configuration
+# 全局配置
 
-## Quick Reference
-
-| Category | Standard | Tool/Command |
-|----------|----------|--------------|
-| **Python Style** | PEP 8 + type hints + Google docstrings | `python-style` skill |
-| **Commit Messages** | Google convention | `commit` skill |
-| **Planning** | Scaled to complexity | See Workflow Section 1.3 |
-| **Quality Checks (Local)** | Format + Lint | `ruff format .` + `ruff check --fix .` |
-| **Quality Checks (Remote)** | Type + Test + Security | CI/CD pipeline (mypy, pytest, scanning) |
-| **Test Coverage** | Context-dependent | `pytest --cov` |
+这是 mixiaomi 的全局 CLAUDE.md，适用于所有项目。只包含 Claude 无法从代码或 skill 中推断的信息。
 
 ---
 
-## 1. Development Workflow & Context Management
+## 1. 写代码的约定
 
-**Core Principle**: Context First → Confirm Direction → Document Impact → Implement.
-
-### 1.1 Pre-Action Confirmation (Recommended)
-
-**建议在以下情况下征求确认**:
-1. **架构级变更**: 影响多个模块或系统设计
-2. **破坏性修改**: 可能影响现有功能
-3. **需求不明确**: 存在多种实现方式
-
-**确认方式**:
-- **批量确认（推荐）**: 描述整体方向和所有受影响文件
-  ```
-  "我将添加 JWT 认证支持，修改：
-  - src/auth.py (添加令牌验证)
-  - src/middleware.py (集成验证逻辑)
-  - tests/test_auth.py (添加测试覆盖)
-  整体方法：[简要描述]。是否继续？"
-  ```
-- **详细确认**: 对于有多种有效方案的复杂架构决策
-
-**可以直接执行的情况**:
-- Level 1 文件级修改（bug 修复、单函数添加）
-- 需求明确且只有一种明显实现方式
-- 用户已明确要求的操作
-
-### 1.2 Context Gathering (Best Practice)
-
-在进行代码修改前，**建议**遵循以下上下文收集流程：
-1. **识别范围**: 这是单文件修复、模块更新还是系统级改造？
-2. **收集上下文**: 使用 Read、Glob 或 Grep 理解受影响区域
-   - *单文件*: 读取具体文件和直接导入
-   - *模块/功能*: 读取模块 README、相关接口和现有测试
-   - *系统级*: 审查架构文档、API 规范和数据流
-3. **验证假设**: 避免猜测文件路径或内容
-
-### 1.3 Impact-Based Documentation & Workflow
-
-根据影响范围更新文档，*在*或*伴随*代码变更时：
-
-| 变更范围 | 场景 | 所需行动 | 文档更新 | Superpowers 技能 |
-| :--- | :--- | :--- | :--- | :--- |
-| **Level 1: 文件级**<br>(单文件修改) | Bug 修复、添加单个函数、<br>重构单个文件 | 1. 读取文件<br>2. 批量确认方向<br>3. 实施 | 如果逻辑复杂则添加代码注释 | - |
-| **Level 2: 模块级**<br>(多文件功能) | 新功能模块、<br>重构相关文件 | 1. 读取模块上下文<br>2. 确认设计方案<br>3. 实施 | 更新函数 docstrings<br>更新模块 README.md | `brainstorming` (可选)<br>`debug` (如适用) |
-| **Level 3: 系统级**<br>(架构变更) | 新应用、<br>数据库迁移、<br>API 重新设计 | 1. **使用 Superpowers 工作流**<br>2. 用户批准<br>3. 实施 | 创建/更新 ARCHITECTURE.md<br>完整规划文档 | `brainstorming` (必需)<br>`writing-plans` (必需)<br>`executing-plans` (推荐) |
-
-**Level 3 推荐工作流（使用 Superpowers）**:
-```
-brainstorming → writing-plans → executing-plans → finishing-a-development-branch
-      ↓              ↓                  ↓                    ↓
-  理解需求      创建实施计划      批量执行任务        完成开发分支
-```
-
-### 1.3.1 Documentation Decision Tree
-
-**核心原则**：智能判断 + 避免过度生成
-
-在创建/更新任何文档前，遵循此决策流程：
-
-1. **分类变更级别**（使用严格标准）
-   - Level 1: 单文件修改、单函数添加、bug修复
-   - Level 2: 多文件功能模块、跨模块重构（需影响≥3个文件）
-   - Level 3: 系统架构变更、数据库迁移、API重设计
-
-2. **检查文档必要性**
-   ```
-   Level 1 → 仅代码注释（如逻辑复杂）
-   Level 2 → 检查是否有现有模块文档：
-             - 有现有docs/MODULE_*.md → 更新它
-             - 无现有文档 + 新模块 → 创建docs/MODULE_X.md
-             - 无现有文档 + 小改进 → 仅更新函数docstrings
-   Level 3 → 必须更新docs/ARCHITECTURE.md
-             - 如有架构变化 → 同步更新或创建相关MODULE文档
-   ```
-
-3. **避免过度生成**
-   - ❌ 不要为临时实验创建文档
-   - ❌ 不要重复生成已存在的内容（检查docs/目录）
-   - ❌ 不要在Level 1/2时创建ARCHITECTURE.md（除非用户明确要求）
-   - ✅ 优先更新现有文档而非创建新文档
-   - ✅ 使用Glob/Read检查docs/目录避免重复
-
-4. **特殊情况处理**
-   - Superpowers规划文档（`docs/plans/YYYY-MM-DD-*.md`）：仅在使用writing-plans skill时生成
-   - 项目README：仅在新项目初始化或用户明确要求时创建
-   - 临时计划：使用`.claude/plans/`（不提交git）或TaskCreate工具
-
-**智能判断示例**：
-- "修复登录bug" → Level 1 → 仅代码注释
-- "重构auth模块（3个文件）" → Level 2 → 更新existing docs/AUTH_MODULE.md（如存在）
-- "添加OAuth支持（跨多模块）" → Level 2/3边界 → 检查docs/是否有AUTH文档，更新或创建
-- "迁移到微服务架构" → Level 3 → 必须更新docs/ARCHITECTURE.md
-
-### 1.3.2 Project Documentation Modes (可选)
-
-项目可以在`.claude/system-instructions.txt`中声明文档偏好：
-
-**模式说明**：
-- **strict**（严格）：只更新existing docs，永不自动创建新文档
-- **standard**（标准）：遵循Section 1.3.1决策树（推荐）
-- **comprehensive**（全面）：Level 2+时主动创建完整文档
-
-**声明方式**（在项目`.claude/system-instructions.txt`顶部）：
-```txt
-# Documentation Mode: standard
-```
-
-**默认行为**：如果项目未声明，默认使用**standard模式**。
-
-**模式行为对照**：
-
-| 场景 | strict | standard | comprehensive |
-|------|--------|----------|---------------|
-| Level 1 bug修复 | 仅代码注释 | 仅代码注释 | 仅代码注释 |
-| Level 2无existing文档 | 跳过创建 | 根据决策树判断 | 创建MODULE文档 |
-| Level 2有existing文档 | 更新 | 更新 | 更新+扩展 |
-| Level 3架构变更 | 询问用户 | 更新ARCHITECTURE.md | 创建完整文档集 |
-
-### 1.4 Planning Document Structure
-
-**双轨规划系统**:
-
-Claude Code 支持两套互补的规划系统，根据场景选择：
-
-#### Option A: Superpowers 工作流（推荐用于实施计划）
-
-**适用场景**: Level 3 系统级架构变更，需要详细的逐步实施计划
-
-**位置**: `<project>/docs/plans/YYYY-MM-DD-<feature>.md`
-
-**工作流**:
-```
-brainstorming → using-git-worktrees → writing-plans → executing-plans
-```
-
-**优势**:
-- 任务粒度细（2-5分钟/任务）
-- 完整代码示例和命令
-- 强制 TDD、DRY、YAGNI
-- 集成 git worktree 隔离
-
-**使用方法**: 调用 `brainstorming` skill 开始
+- Python: PEP 8 + type hints + Google docstrings，细节见 `python-style` skill
+- 提交消息: Google convention，用 `commit` skill 生成
+- 本地质量检查: `ruff format .` + `ruff check --fix .`（pre-commit 自动跑）
+- 架构级变更（新应用、数据库迁移、API 重设计）必须走 brainstorming → writing-plans → executing-plans
+- 文档生成遵循 `doc-control` skill，不过度生成
 
 ---
 
-#### Option B: 架构规划文档（用于高层设计）
+## 2. 我的工作流
 
-**适用场景**: Level 3 系统级架构设计，需要记录架构决策和长期维护
+除了写代码，我日常还有内容创作和项目管理两条线，都通过 skill 串联。
 
-**位置**: `<project>/docs/ARCHITECTURE.md` 或 `<project>/ARCHITECTURE.md`
+### 内容创作流水线
 
-**推荐**: `<project>/docs/ARCHITECTURE.md`（与其他文档一起，便于查看和版本控制）
-
-**目录结构**:
 ```
-<project>/
-├── .claude/
-│   ├── system-instructions.txt  # 项目特定规则（推荐，如 csfilter）
-│   ├── settings.local.json      # 权限配置
-│   └── plans/                   # （可选）临时规划，不提交到 git
-├── docs/
-│   ├── ARCHITECTURE.md          # 架构文档（推荐位置）
-│   ├── MODULE_A.md              # 模块文档（如 csfilter 的 COLLECTOR_ARCHITECTURE.md）
-│   └── plans/                   # Superpowers 实施计划（提交到 git）
-│       └── 2026-02-02-feature.md
-└── src/
+素材获取 → 文章生成 → 配图 → 知识沉淀 → 飞书发布
 ```
 
-**必需内容**:
-1. **元信息**: 日期、状态、优先级
-2. **目标概述**: 清晰具体的目标
-3. **架构设计**:
-   - 系统架构（高层设计和组件关系）
-   - 技术栈和工具
-   - 数据流
-   - API/接口规范（函数签名、类设计）
-4. **TodoList**: 按状态分类的任务分解
-5. **工作流步骤**: 详细执行计划
-6. **设计决策记录**: 关键技术选择的理由
-7. **成功标准**: 如何判断完成
-8. **历史**: 变更日志
+| 环节 | Skill | 一句话说明 |
+|------|-------|-----------|
+| 跨平台内容分析 | `ucal` | 给链接分析，说"调研XX"搜索综合 |
+| X 信息流 | `x-feed` | 关注扩展、热点提取、知识蒸馏 |
+| 具身智能资讯 | `embodied-intel` | 机器人行业日报 |
+| X 帖子转 MD | `x2md` | X/Twitter URL → Obsidian 笔记 |
+| 文章生成 | `article-gen` | 6 种类型：news/architecture/review/tutorial/notes/essay |
+| 文章配图 | `article-image` | 封面图和插图，5D 风格系统 |
+| AI 图片生成 | `gemini-image` | Gemini Vertex AI 生图/编辑/理解 |
+| 知识库 | `kb` | Obsidian 写入/检索/综合/飞书同步/待办 |
+| 飞书 API | `feishu` | wiki、文档、多维表格、消息 |
 
-**规划工作流**:
-```
-Create Plan → Get Confirmation → Implement → Update Progress → Archive
-     ↓              ↓                  ↓            ↓             ↓
-  Use template   User approves    Write code    Update doc    Move to archive/
-```
+**日报约定**："科技日报" → `x-feed`；"机器人日报" → `embodied-intel`；只说"日报" → 问是哪个
 
-**逐步指南**:
+### 项目管理
 
-1. **Create Plan**
-   - 复制模板到 `<project>/.claude/plans/active/your-project.md`
-   - 填写所有必需章节
-   - 在 `PLANS_INDEX.md` 中添加引用
-
-2. **Get Confirmation**
-   - 向用户呈现设计
-   - 明确批准后再继续
-   - 处理任何疑虑或变更
-
-3. **Implement**
-   - 首先阅读架构文档
-   - 使用 TaskCreate 跟踪任务
-   - 遵循文档化的设计决策
-   - 随着实施更新文档
-
-4. **Update Documentation**
-   - 更新 docs/ARCHITECTURE.md 反映架构变更
-   - 创建或更新模块文档（如 docs/MODULE_NAME.md）
-   - 记录关键设计决策
+| Skill | 用途 |
+|-------|------|
+| `project-sync` | 云效迭代 → 飞书多维表格（数据同步） |
+| `notify` | 云效迭代进展 → 飞书私信卡片（按部门/人员推送） |
 
 ---
 
-#### 选择哪个系统？
+## 3. 搜索和抓取工具
 
-| 标准 | Superpowers (`docs/plans/`) | 架构文档 (`docs/`) |
-|------|---------------------------|---------------------------|
-| **目标** | 逐步实施指南 | 架构决策记录 |
-| **粒度** | 细粒度任务（2-5分钟） | 高层设计和模块说明 |
-| **代码** | 完整代码示例 | 接口和签名 |
-| **执行** | executing-plans skill | 手动实施 |
-| **隔离** | Git worktree | 当前分支 |
-| **版本控制** | 提交到 git | 提交到 git |
-| **最佳用途** | 新功能实施 | 系统设计文档化 |
-| **示例** | `docs/plans/2026-02-02-auth.md` | `docs/ARCHITECTURE.md`<br>`docs/COLLECTOR_ARCHITECTURE.md` |
+环境里有 3 套工具，能力不同，按场景选：
 
-**推荐组合**（参考 csfilter）:
-- 架构文档：`docs/ARCHITECTURE.md`（总架构）+ `docs/MODULE_*.md`（模块文档）
-- 实施计划：`docs/plans/YYYY-MM-DD-feature.md`（Superpowers 生成）
-- 项目规则：`.claude/system-instructions.txt`（项目特定执行准则）
+| 场景 | 首选 | 降级 |
+|------|------|------|
+| 搜索信息 | tavily_search | WebSearch |
+| 读取已知 URL（静态） | tavily_extract | ucal_platform_read(generic) |
+| JS 渲染页面 | ucal_platform_read(generic) | ucal_browser_action |
+| 中国平台（小红书/知乎/X） | ucal_platform_read(平台名) | - |
+| 飞书文档 | lark-mcp | - |
+| 爬取多页 | tavily_crawl + tavily_map | - |
+| 综合调研 | tavily_research | - |
+| GitHub 内容 | gh CLI | tavily_extract |
+| 页面交互 | ucal_browser_action | - |
 
-### 1.5 Execution Rules
+**降级规则**: tavily 空 → ucal; WebFetch 被拦 → tavily → ucal; ucal 地区限制 → tavily
 
-- **Read before edit**: 总是先读取目标文件
-- **Confirm when needed**: 对架构级变更或需求不明确时征求确认
-- **Sync Docs**: 如果更改逻辑，更新说明（注释/文档）
-- **Avoid "Ghost" Plans**: 除非被要求，否则避免为琐碎任务创建完整计划文件
-- **Check before documenting**: 使用Glob检查docs/目录避免重复创建文档
-- **Follow decision tree**: 严格遵循Section 1.3.1的文档决策树
-- **Default to standard**: 项目未声明模式时使用standard模式
+**已知限制**: WebFetch/WebSearch 不稳定; tavily 无 JS 渲染; ucal 慢且海外站不通; 飞书必须用 lark-mcp
 
 ---
 
-## 2. Code Quality Standards
+## 4. Superpowers 路径
 
-### 2.1 Python Code Style
+CWD 是 `/Users/mixiaomiupup/projects`（父目录），不在任何项目内。brainstorming/writing-plans 中的 `docs/plans/` 指的是**项目内**的目录，不是 CWD 的：
 
-When generating Python code:
+1. 从对话确定目标项目
+2. `mkdir -p /Users/mixiaomiupup/projects/<project>/docs/plans`
+3. 用绝对路径保存: `/Users/mixiaomiupup/projects/<project>/docs/plans/YYYY-MM-DD-<feature>.md`
 
-**Mandatory**:
-- Follow PEP 8 guidelines
-- Use type hints for function parameters and return values
-- Include docstrings for functions and classes (Google-style format)
-- Use descriptive variable names (snake_case)
-- Limit line length to 88 characters (Black default)
-
-**Workflow**:
-- After generating or modifying Python code, automatically run `python-style` skill
-- Ensure PEP 8 compliance before considering code complete
-
-### 2.2 Quality Gates
-
-代码**建议**在两个层次通过自动化检查：
-
-#### Local Checks (Pre-commit Hooks)
-在每次 `git commit` 时自动运行：
-- `ruff format .` - 代码格式化
-- `ruff check --fix .` - Linting
-- 快速检查（< 30秒）
-
-#### Remote Checks (CI/CD Pipeline)
-在每次 `git push` 到远程仓库时自动运行：
-- 所有本地检查 PLUS:
-- `mypy .` - 类型检查
-- `pytest --cov` - 完整测试套件和覆盖率报告
-- Security scanning - 依赖和代码漏洞
-- **所有检查应通过后才能合并请求**
-
-**支持的 CI/CD 平台**:
-- GitHub Actions
-- GitLab CI
-- Jenkins
-- CircleCI
-- 其他支持 Git hooks 的平台
-
-#### Compliance Rules
-- ✓ 确保代码在完成前能通过所有检查
-- ✓ 如果检查失败，立即修复
-- ✓ 避免绕过或禁用质量门控
-
-### 2.3 Testing Requirements
-
-**For New Functionality**:
-- Write precise test cases before implementing
-- Ensure all tests pass before considering implementation complete
-- Test coverage must be comprehensive and meaningful
-- **Target test coverage based on context**:
-  - Critical logic (auth, payment, data integrity): 90%+
-  - Business logic: 70-80%
-  - Utilities and helpers: 60%+
-  - UI components: Case-by-case
-
-**For Existing Code**:
-- Run existing test suite to verify no regressions
-- All previous tests must pass
-- Never break existing features
+无法确定项目时询问用户。不适用于 Claude Code 内置 plan mode 文件（`~/.claude/plans/`）。
 
 ---
 
-## 3. Development Best Practices
+## 5. Obsidian 知识库
 
-### 3.1 Backward Compatibility
+**Vault**: `~/Documents/obsidian/mixiaomi`
 
-**Principles**:
-- Preserve existing functionality whenever possible
-- Non-breaking changes should be the default approach
-- Maintain API stability and data compatibility
-
-**When Breaking Changes Are Necessary**:
-- Clearly document breaking changes in planning document
-- Provide migration guide if applicable
-- Justify why breaking change is required
-
-### 3.2 Error Handling and Logging
-
-**Error Handling**:
-- Always handle exceptions appropriately (never silently fail)
-- Validate all inputs from external sources (user input, API calls, files)
-- Provide meaningful error messages to users (not stack traces in production)
-
-**Logging**:
-- Use structured logging with appropriate levels:
-  - **DEBUG**: Detailed diagnostic information
-  - **INFO**: General informational messages
-  - **WARNING**: Something unexpected but recoverable
-  - **ERROR**: Error occurred but application continues
-- Log critical operations: user actions, data changes, errors
-
-### 3.3 Commit Messages
-
-**Standard**: Google's convention style
-
-**How to Apply**:
-- Use `commit` skill to generate commit messages
-- Do not manually craft commit messages
+- 知识库操作 → `kb` skill
+- X/Twitter 链接 → `x2md` skill
 
 ---
 
-## 4. Integration with Claude Code Tools
+## 6. Skill 架构维护
 
-### 4.1 Task Management Tools
+修改 `~/.claude/skills/` 下的 SKILL.md 后，判断是否需要同步更新架构文档：
 
-**Purpose**: 从规划文档跟踪任务
+**触发**: 增删 skill、工作流步骤变化、依赖关系变化、API 调用方式变化、新增关键约束
+**不触发**: typo、措辞、代码格式、注释补充、流程不变的内容扩充
 
-**Available Tools**:
-- **TaskCreate**: 创建新任务
-- **TaskUpdate**: 更新任务状态（pending/in_progress/completed）
-- **TaskList**: 列出所有任务
-- **TaskGet**: 获取特定任务详情
+**更新步骤**: Edit `~/.claude/skills/ARCHITECTURE.md` → 同步 `~/Documents/obsidian/mixiaomi/技术笔记/Skill架构.md` → 如 skill 增删则更新下方索引
 
-**Best Practices**:
-- 与规划文档的 TodoList 章节同步任务
-- 实时标记任务为 in_progress/completed
-- 同时只有一个任务应为 in_progress
-- 完成后立即标记任务为 completed（不要批量处理）
-- 如果任务失败或被阻塞，保持 in_progress 并为阻塞项创建新任务
+### Skill 索引
 
-**When to Use**:
-- 多步骤任务（3个或更多步骤）
-- 非琐碎的复杂任务
-- 用户明确请求待办列表
-- 用户提供多个任务
+**内容创作**: article-gen | article-image | gemini-image | x2md | ucal | x-feed | embodied-intel | kb | feishu
 
-**When NOT to Use**:
-- 单一、直接的任务（< 3步完成）
-- 纯会话或信息性任务
+**项目管理**: project-sync | notify
 
-**Example Usage**:
-```javascript
-// Create task
-TaskCreate({
-  subject: "Implement JWT authentication",
-  description: "Add JWT token validation to auth.py",
-  activeForm: "Implementing JWT authentication"
-})
+**开发工具**: commit | remote-repos | sync-config | server | debug | test | review | refactor | python-style | explain
 
-// Update to in_progress when starting
-TaskUpdate({
-  taskId: "1",
-  status: "in_progress"
-})
+**独立工具**: youpin | doc-control | skill-creator
 
-// Mark completed when done
-TaskUpdate({
-  taskId: "1",
-  status: "completed"
-})
-```
-
-### 4.2 Superpowers Skills Integration
-
-**Purpose**: 增强工作流的专业技能
-
-**Core Skills**:
-- **brainstorming**: Level 3 架构变更前**必需**使用
-- **writing-plans**: 在 brainstorming 后创建详细实施计划
-- **executing-plans**: 在独立会话中批量执行计划
-- **subagent-driven-development**: 在当前会话中通过子代理执行计划
-- **using-git-worktrees**: 为功能工作创建隔离工作树
-- **finishing-a-development-branch**: 完成开发分支（合并/PR/清理）
-
-**Workflow Integration**:
-```
-Level 1 (文件级): 直接实施
-Level 2 (模块级): 可选使用 brainstorming
-Level 3 (系统级): brainstorming → writing-plans → executing-plans → finishing
-```
-
-**When to Use Each**:
-- **brainstorming**: 创建功能、构建组件、添加功能或修改行为之前
-- **writing-plans**: 有规范或多步骤任务需求时
-- **executing-plans**: 有书面实施计划需在独立会话执行时
-- **using-git-worktrees**: 开始需要与当前工作区隔离的功能工作前
-
-详细说明见 Section 7: Superpowers Integration
-
-### 4.3 AskUserQuestion Tool
-
-**Purpose**: Gather requirements and clarify ambiguity
-
-**When to Use**:
-- Multiple valid approaches exist for implementation
-- User preferences matter for the implementation
-- Requirements are unclear or ambiguous
-- Need to choose between architectural options
-
-**How to Use**:
-- Present 2-4 options with clear descriptions
-- Use multiSelect when choices are not mutually exclusive
-- Always provide "Other" option for custom input
-
-### 4.4 Read/Edit Tools
-
-**Purpose**: 管理规划文档和代码
-
-**Workflow**:
-- **Read** 规划文档后再编写任何代码
-- **Edit** 规划文档随决策演变
-- **Read** 现有代码后再建议修改
-- **Edit** 现有代码文件（优于创建新文件）
-- **Write** 新文件仅在明确需要时
-
-**Best Practice**: 在提出代码变更前先读取文件
-
-### 4.5 Web Search and Fetch Tools
-
-**Purpose**: 搜索和抓取网页内容
-
-**3 套工具体系**:
-- **Built-in**: WebSearch, WebFetch（受环境限制，当前不稳定）
-- **Tavily MCP**: tavily_search, tavily_extract, tavily_map, tavily_crawl, tavily_research
-- **ucal MCP**: ucal_platform_search, ucal_platform_read, ucal_browser_action（需先 ToolSearch 加载）
-
-**工具优先级**:
-
-| 场景 | 首选工具 | 降级方案 | 原因 |
-|------|---------|---------|------|
-| 搜索信息 | tavily_search | WebSearch | 覆盖广、支持域名/时间过滤、不受地区限制 |
-| 读取已知 URL（静态页） | tavily_extract | ucal_platform_read(generic) | 快速，主流站效果好 |
-| 读取 JS 渲染页面 | ucal_platform_read(generic) | ucal_browser_action | 真实浏览器渲染，内容完整 |
-| 中国平台(xhs/zhihu/x) | ucal_platform_read(平台名) | - | 平台特定适配+评论/互动数据 |
-| 飞书文档 | lark-mcp | - | 专用工具，不走 web 抓取 |
-| 爬取站点多页 | tavily_crawl + tavily_map | - | 专为多页设计 |
-| 综合调研 | tavily_research | - | 多源自动综合，质量极高 |
-| GitHub 内容 | gh CLI | tavily_extract | CLI 格式更好，避免 UI 噪音 |
-| 页面交互(点击/填表) | ucal_browser_action | - | 唯一能做浏览器交互 |
-
-**降级规则**:
-- tavily_extract 内容不完整/空 → ucal_platform_read(generic)
-- WebFetch 域名被拦 → tavily_extract → ucal_platform_read(generic)
-- WebSearch 无结果(小众站) → tavily_search(include_domains=[...])
-- ucal 无法访问某站(地区限制) → tavily_extract
-
-**已知限制**:
-- **WebFetch/WebSearch**: 当前环境不稳定，多数域名被拦截；WebSearch 文档标注仅美国可用
-- **tavily**: 无 JS 渲染能力；小众中文站有时搜不到（但优于 WebSearch）
-- **ucal**: 较慢（真实浏览器）；浏览器在中国区运行，海外受地区限制站点不通；xhs/zhihu 需先 ucal_platform_login；需 ToolSearch 先加载
-- **飞书**: 所有 web 工具都无法有效抓取飞书文档，必须用 lark-mcp
+**详细架构**: `Read ~/.claude/skills/ARCHITECTURE.md`
 
 ---
 
-## 5. Project vs Global Configuration
-
-### 5.1 This Document (Global CLAUDE.md)
-
-位置: `~/.claude/CLAUDE.md`
-
-适用于**所有项目**:
-- 开发工作流原则（Level 1/2/3）
-- 代码质量标准
-- 开发最佳实践
-- 工具使用指南
-- Superpowers 技能整合
-
-### 5.2 Project-Specific Configuration
-
-每个项目可能有自己的配置文件：
-
-#### Option 1: 完整 CLAUDE.md
-位置: `<project>/.claude/CLAUDE.md`
-
-包含:
-- 项目特定目标和范围
-- 详细的项目系统架构
-- 模块分解和接口
-- 项目特定的设计决策
-- 覆盖全局默认值的自定义规则
-
-#### Option 2: system-instructions.txt
-位置: `<project>/.claude/system-instructions.txt`
-
-包含:
-- 简化的项目特定指令
-- 不需要完整 CLAUDE.md 的轻量级替代方案
-
-#### Option 3: settings.local.json + ARCHITECTURE.md
-位置:
-- `<project>/.claude/settings.local.json`
-- `<project>/ARCHITECTURE.md` 或 `<project>/docs/ARCHITECTURE.md`
-
-包含:
-- JSON 中的 Claude Code 设置
-- Markdown 中的架构文档
-
-**Configuration Hierarchy**:
-```
-Global ~/.claude/CLAUDE.md (默认)
-    ↓ (覆盖)
-Project .claude/CLAUDE.md
-    ↓ (如果不存在，则回退到)
-Project .claude/system-instructions.txt
-    ↓ (补充)
-Project ARCHITECTURE.md
-```
-
-**Relationship**:
-- Global CLAUDE.md 定义**如何**工作（流程、标准、工具）
-- Project CLAUDE.md/system-instructions.txt 定义**什么**构建（特定实施）
-- 使用规划系统创建项目 ARCHITECTURE.md
-
----
-
-## 6. Common Workflows
-
-### 6.1 Starting a New Project
-
-**Option A: Using Superpowers (Recommended)**
-1. 使用 `brainstorming` skill 理解需求
-2. 使用 `using-git-worktrees` 创建隔离工作区
-3. 使用 `writing-plans` 创建实施计划到 `docs/plans/YYYY-MM-DD-project.md`
-4. 使用 `executing-plans` 或 `subagent-driven-development` 执行
-5. 使用 `finishing-a-development-branch` 完成并合并
-
-**Option B: Using Architecture Documentation**
-1. 创建 `<project>/docs/ARCHITECTURE.md`（总架构）
-2. 填写架构设计（目标、技术栈、模块、数据流）
-3. 获取用户对设计的确认
-4. 创建 `.claude/system-instructions.txt`（项目特定规则）
-5. 使用 TaskCreate 跟踪实施任务
-6. 随进展创建模块文档（`docs/MODULE_*.md`）
-
-### 6.2 Adding a Feature to Existing Project
-
-**Option A: Using Superpowers (For Complex Features)**
-1. 使用 `brainstorming` skill 探索功能设计
-2. 使用 `using-git-worktrees` 创建功能分支
-3. 使用 `writing-plans` 创建实施计划
-4. 使用 `executing-plans` 执行
-5. 使用 `finishing-a-development-branch` 完成
-
-**Option B: Direct Implementation (For Simple Features)**
-1. 读取现有 `docs/ARCHITECTURE.md` 和相关模块文档
-2. 确保新功能符合现有架构
-3. 如需要获取用户确认
-4. 直接实施
-5. 更新 `docs/ARCHITECTURE.md` 或创建 `docs/MODULE_*.md`
-
-### 6.3 Fixing a Bug
-
-**Level 1 (Simple Bug)**:
-1. 使用 `debug` skill 分析（可选）
-2. 读取受影响代码后提出修复
-3. 实施修复
-4. 添加测试防止回归
-
-**Level 2/3 (Complex Bug)**:
-1. 使用 `debug` skill 进行系统性调试
-2. 如 bug 修复复杂则创建最小规划文档
-3. 读取受影响代码后提出修复
-4. 实施修复
-5. 添加测试防止回归
-6. 如需要更新规划文档
-
----
-
-## 7. Superpowers Skills Integration
-
-Claude Code 与 Superpowers 技能生态深度集成，提供增强的工作流能力。
-
-### 7.1 Complete Development Lifecycle
-
-```
-brainstorming → using-git-worktrees → writing-plans → executing-plans → finishing-a-development-branch
-      ↓                  ↓                   ↓                ↓                     ↓
-  理解需求        创建隔离工作区      创建实施计划      批量执行任务           完成开发分支
-```
-
-### 7.2 Skill-by-Skill Guide
-
-#### brainstorming
-**何时使用**: 创建功能、构建组件、添加功能或修改行为之前（Level 3 **必需**）
-
-**功能**:
-- 通过自然协作对话将想法转化为设计
-- 一次探索一个问题以细化想法
-- 提出 2-3 种不同方法及权衡
-- 将验证的设计写入 `docs/plans/YYYY-MM-DD-<topic>-design.md`
-
-**输出**:
-- 设计文档在 `docs/plans/`
-- 继续到 writing-plans 的选项
-
-#### using-git-worktrees
-**何时使用**: 开始需要与当前工作区隔离的功能工作或执行实施计划之前
-
-**功能**:
-- 创建隔离的 git worktree
-- 智能目录选择和安全验证
-- 保持主工作区清洁
-
-**推荐**: 在调用 writing-plans 前使用
-
-#### writing-plans
-**何时使用**: 有规范或多步骤任务需求时，在接触代码前
-
-**功能**:
-- 创建全面的实施计划
-- 细粒度任务（每个 2-5 分钟）
-- 包含完整代码示例、测试和命令
-- 强制 TDD、DRY、YAGNI
-
-**位置**: `docs/plans/YYYY-MM-DD-<feature>.md`
-
-**输出**:
-- 实施计划文档
-- 选项 1: subagent-driven-development（当前会话）
-- 选项 2: executing-plans（独立会话）
-
-#### executing-plans
-**何时使用**: 有书面实施计划需在独立会话中通过审查检查点执行时
-
-**功能**:
-- 加载计划、批判性审查、批量执行任务
-- 默认批次：前 3 个任务
-- 批次间检查点进行架构师审查
-
-**流程**:
-1. 加载和审查计划
-2. 执行批次（前 3 个任务）
-3. 报告并等待反馈
-4. 继续直到完成
-5. 使用 finishing-a-development-branch 完成
-
-#### subagent-driven-development
-**何时使用**: 在当前会话中执行有独立任务的实施计划时
-
-**功能**:
-- 为每个任务分派新鲜子代理
-- 任务间代码审查
-- 快速迭代
-
-**对比 executing-plans**:
-- subagent-driven: 当前会话，任务间审查
-- executing-plans: 独立会话，批次间审查
-
-#### finishing-a-development-branch
-**何时使用**: 实施完成、所有测试通过且需要决定如何集成工作时
-
-**功能**:
-- 验证测试通过
-- 呈现结构化选项：合并、PR 或清理
-- 指导开发工作完成
-
-### 7.3 Level-Based Skill Usage
-
-| Level | Required Skills | Optional Skills | Workflow |
-|-------|----------------|-----------------|----------|
-| **Level 1** | - | debug | Direct implementation |
-| **Level 2** | - | brainstorming, debug | brainstorming → Direct implementation |
-| **Level 3** | brainstorming, writing-plans | using-git-worktrees, executing-plans, subagent-driven-development, finishing-a-development-branch | Full Superpowers workflow |
-
-### 7.4 Planning System Comparison
-
-| Aspect | Superpowers (`docs/plans/`) | Architecture Docs (`docs/`) |
-|--------|---------------------------|----------------------------------------|
-| **Created By** | writing-plans skill | Manual (inspired by csfilter) |
-| **Granularity** | Fine-grained (2-5 min tasks) | High-level modules |
-| **Code Examples** | Complete code snippets | Interface signatures |
-| **Execution** | executing-plans skill | Manual implementation |
-| **TDD Enforcement** | Yes (forced) | Recommended |
-| **Git Integration** | Worktree-based | Current branch |
-| **File Location** | `docs/plans/2026-02-02-*.md` | `docs/ARCHITECTURE.md`<br>`docs/MODULE_*.md` |
-| **Best For** | Feature implementation | System design documentation |
-
-### 7.5 Choosing the Right Approach
-
-**Use Superpowers When**:
-- Building new features from requirements
-- Need step-by-step implementation guidance
-- Want TDD enforcement
-- Prefer isolated worktree development
-- Need frequent checkpoints
-
-**Use Architecture Docs When**:
-- Documenting system design long-term
-- Recording architectural decisions
-- Need high-level design overview
-- Want persistent design documentation
-- Building modular systems (like csfilter)
-
-**Use Both When**:
-- Large system-level changes (Level 3)
-- Strategy: Create `docs/ARCHITECTURE.md` for design → Use Superpowers for implementation (`docs/plans/2026-02-02-*.md`)
-
-### 7.6 Superpowers 计划文件路径解析
-
-**注意: CWD 通常是 `/Users/mixiaomiupup/projects`（父目录），不在任何项目内。**
-
-使用 `brainstorming` 或 `writing-plans` skill 时，skill 中的 `docs/plans/` 指的是**项目**的 `docs/plans/`，不是 CWD 的。
-
-**必须在保存计划文件前执行以下步骤**:
-
-1. **从对话上下文确定目标项目**（用户在讨论哪个项目的功能）
-2. **确认项目存在**: `ls /Users/mixiaomiupup/projects/<project>/.git`
-3. **确保目录存在**: `mkdir -p /Users/mixiaomiupup/projects/<project>/docs/plans`
-4. **使用绝对路径保存**: `/Users/mixiaomiupup/projects/<project>/docs/plans/YYYY-MM-DD-<feature>.md`
-
-**无法确定项目时，询问用户。**
-
-**此规则不适用于 Claude Code 内置 plan mode 文件**（随机词命名，如 `curried-honking-meteor.md`），它们正确地属于 `~/.claude/plans/`。
-
----
-
-## 8. Personal Knowledge Base (Obsidian)
-
-**Vault 路径**: `~/Documents/obsidian/mixiaomi`
-
-- 知识库操作（写入、检索、综合、洞察、浏览）→ 使用 `kb` skill
-- X/Twitter 链接保存 → 使用 `x2md` skill
-- 两个 skill 共享同一套分类体系和 frontmatter 规范
-
----
-
-**Version**: 3.1.0
-**Last Updated**: 2026-02-05
-**Major Changes**:
-- 文档控制增强：新增Section 1.3.1文档决策树，防止过度生成文档
-- 文档模式系统：新增Section 1.3.2项目文档模式（strict/standard/comprehensive）
-- 智能判断规则：明确Level分类标准和文档必要性检查流程
-- 执行规则更新：新增"Check before documenting"等3条规则
-
-**Version History**:
-- 3.1.0 (2026-02-05): 文档控制增强
-- 3.0.0 (2026-02-02): 项目导向化、平台通用化、语言人性化、工具修正、Superpowers整合、双轨系统
+**Version**: 5.0.0 | **Updated**: 2026-03-21
+**Changes**: 重写结构。去掉 Quick Reference 冷启动、去掉自定义 L1/L2/L3 分级（Claude 内置行为）。以"我的约定→我的工作流→我的工具"为主线，读起来像人话。

@@ -48,6 +48,16 @@
         "lastUpdated": "2026-03-13T01:41:11.477Z",
         "gitCommitSha": "69c0b1a0674149f27b61b2635f935524b6add202"
       }
+    ],
+    "telegram@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/mixiaomiupup/.claude/plugins/cache/claude-plugins-official/telegram/0.0.1",
+        "version": "0.0.1",
+        "installedAt": "2026-03-20T02:13:07.890Z",
+        "lastUpdated": "2026-03-20T02:13:07.890Z",
+        "gitCommitSha": "8908a582f80d1396b2af65949a0cd001fe8aacca"
+      }
     ]
   }
 }
