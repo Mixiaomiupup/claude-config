@@ -10,17 +10,6 @@
       "TAVILY_API_KEY": "YOUR_TAVILY_API_KEY_HERE"
     }
   },
-  "ucal": {
-    "type": "stdio",
-    "command": "$HOME/.local/bin/uv",
-    "args": [
-      "run",
-      "--directory",
-      "$HOME/projects/ucal",
-      "ucal"
-    ],
-    "env": {}
-  },
   "lark-mcp": {
     "type": "stdio",
     "command": "npx",
@@ -67,5 +56,17 @@
     "env": {
       "YUNXIAO_ACCESS_TOKEN": "YOUR_YUNXIAO_ACCESS_TOKEN_HERE"
     }
+  },
+  "anyweb": {
+    "type": "stdio",
+    "command": "/Users/mixiaomiupup/.local/bin/uv",
+    "args": [
+      "run",
+      "--directory",
+      "/Users/mixiaomiupup/projects/anyweb",
+      "anyweb",
+      "--mcp"
+    ],
+    "env": {}
   }
 }
